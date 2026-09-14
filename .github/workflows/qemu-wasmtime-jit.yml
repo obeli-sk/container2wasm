@@ -116,5 +116,6 @@ jobs:
             --artifact-type application/wasm \
             "qemu-system-x86_64.wasm:application/wasm" \
             "args.json:application/json" \
+            "image/:application/vnd.oci.image.layer.v1.tar" \
             "SHA256SUMS:text/plain"
           oras manifest fetch --descriptor "${IMAGE_BASE}:${TAG}"
