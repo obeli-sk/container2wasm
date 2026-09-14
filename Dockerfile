@@ -5,6 +5,7 @@ ARG WASI_SDK_VERSION=19
 ARG WASI_SDK_VERSION_FULL=${WASI_SDK_VERSION}.0
 ARG WASI_VFS_VERSION=v0.3.0
 ARG WIZER_VERSION=04e49c989542f2bf3a112d60fbf88a62cce2d0d0
+ARG WIZER_MAX_DATA_SEGMENTS=10000
 ARG EMSDK_VERSION=3.1.40 # TODO: support recent version
 ARG EMSDK_VERSION_QEMU=4.0.10
 ARG BINARYEN_VERSION=114
@@ -271,6 +272,7 @@ ARG WASI_VFS_VERSION
 ARG WASI_SDK_VERSION
 ARG WASI_SDK_VERSION_FULL
 ARG WIZER_VERSION
+ARG WIZER_MAX_DATA_SEGMENTS
 RUN apt-get update -y && apt-get install -y make curl git gcc xz-utils
 
 WORKDIR /wasi
@@ -292,6 +294,8 @@ WORKDIR /work/
 RUN git clone https://github.com/bytecodealliance/wizer && \
     cd wizer && \
     git checkout "${WIZER_VERSION}" && \
+    sed -i "s/const MAX_DATA_SEGMENTS: usize = 100_000;/const MAX_DATA_SEGMENTS: usize = ${WIZER_MAX_DATA_SEGMENTS};/" src/snapshot.rs && \
+    grep -F "const MAX_DATA_SEGMENTS: usize = ${WIZER_MAX_DATA_SEGMENTS};" src/snapshot.rs && \
     cargo build --bin wizer --all-features && \
     mkdir -p /tools/wizer/ && \
     mv include target/debug/wizer /tools/wizer/ && \
@@ -964,6 +968,7 @@ ARG WASI_SDK_VERSION
 ARG WASI_SDK_VERSION_FULL
 ARG BINARYEN_VERSION
 ARG WIZER_VERSION
+ARG WIZER_MAX_DATA_SEGMENTS
 RUN apt-get update -y && apt-get install -y make curl git gcc xz-utils
 
 WORKDIR /wasi
@@ -985,6 +990,8 @@ WORKDIR /work/
 RUN git clone https://github.com/bytecodealliance/wizer && \
     cd wizer && \
     git checkout "${WIZER_VERSION}" && \
+    sed -i "s/const MAX_DATA_SEGMENTS: usize = 100_000;/const MAX_DATA_SEGMENTS: usize = ${WIZER_MAX_DATA_SEGMENTS};/" src/snapshot.rs && \
+    grep -F "const MAX_DATA_SEGMENTS: usize = ${WIZER_MAX_DATA_SEGMENTS};" src/snapshot.rs && \
     cargo build --bin wizer --all-features && \
     mkdir -p /tools/wizer/ && \
     mv include target/debug/wizer /tools/wizer/ && \
