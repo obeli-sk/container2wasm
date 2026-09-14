@@ -15,7 +15,7 @@ use std::{
     collections::HashMap,
     env, fs,
     io::{Read, Write},
-    os::unix::net::UnixListener,
+    net::{TcpListener, UdpSocket},
     path::{Path, PathBuf},
     process,
     sync::{
@@ -64,19 +64,18 @@ fn main() -> Result<()> {
         .context("usage: obelisk-activity-vm-http-proxy QUEUE_DIR ALLOWED_HOSTS")?;
     fs::create_dir_all(&queue)?;
     let tls = tls_config(&allowed)?;
+    let http = TcpListener::bind(("127.0.0.1", 80)).context("binding HTTP listener")?;
+    let https = TcpListener::bind(("127.0.0.1", 443)).context("binding HTTPS listener")?;
+    let dns = UdpSocket::bind(("127.0.0.1", 53)).context("binding DNS listener")?;
     let http_queue = queue.clone();
-    thread::spawn(move || listen_http(&http_queue));
-    listen_https(&queue, &tls)
+    thread::spawn(move || listen_dns(dns));
+    thread::spawn(move || listen_http(http, &http_queue));
+    fs::write("/tmp/obelisk-activity-vm-network-ready", b"")?;
+    listen_https(https, &queue, &tls)
 }
 
-fn listen_http(queue: &Path) {
-    let socket = Path::new("/tmp/obelisk-activity-vm-http.sock");
-    let _ = fs::remove_file(socket);
-    let listener = UnixListener::bind(socket).expect("binding HTTP bridge socket");
-    eprintln!(
-        "obelisk-activity-vm HTTP bridge listening on {}",
-        socket.display()
-    );
+fn listen_http(listener: TcpListener, queue: &Path) {
+    eprintln!("obelisk-activity-vm HTTP bridge listening on 127.0.0.1:80");
     for connection in listener.incoming() {
         match connection {
             Ok(stream) => {
@@ -92,14 +91,8 @@ fn listen_http(queue: &Path) {
     }
 }
 
-fn listen_https(queue: &Path, config: &Arc<ServerConfig>) -> Result<()> {
-    let socket = Path::new("/tmp/obelisk-activity-vm-https.sock");
-    let _ = fs::remove_file(socket);
-    let listener = UnixListener::bind(socket)?;
-    eprintln!(
-        "obelisk-activity-vm HTTPS bridge listening on {}",
-        socket.display()
-    );
+fn listen_https(listener: TcpListener, queue: &Path, config: &Arc<ServerConfig>) -> Result<()> {
+    eprintln!("obelisk-activity-vm HTTPS bridge listening on 127.0.0.1:443");
     for connection in listener.incoming() {
         let stream = connection?;
         let queue = queue.to_owned();
@@ -115,6 +108,95 @@ fn listen_https(queue: &Path, config: &Arc<ServerConfig>) -> Result<()> {
         });
     }
     Ok(())
+}
+
+fn listen_dns(socket: UdpSocket) {
+    let mut request = [0_u8; 4096];
+    loop {
+        let result = socket.recv_from(&mut request).and_then(|(length, peer)| {
+            let response = dns_response(&request[..length]);
+            socket.send_to(&response, peer)
+        });
+        if let Err(error) = result {
+            eprintln!("obelisk-activity-vm DNS responder: {error}");
+        }
+    }
+}
+
+fn dns_response(request: &[u8]) -> Vec<u8> {
+    if request.len() < 12 {
+        return Vec::new();
+    }
+
+    let mut question_end = 12;
+    while question_end < request.len() {
+        let label_length = request[question_end] as usize;
+        question_end += 1;
+        if label_length == 0 {
+            break;
+        }
+        if label_length > 63 || question_end + label_length > request.len() {
+            return Vec::new();
+        }
+        question_end += label_length;
+    }
+    if question_end + 4 > request.len() {
+        return Vec::new();
+    }
+    question_end += 4;
+
+    let query_type = u16::from_be_bytes([request[question_end - 4], request[question_end - 3]]);
+    let query_class = u16::from_be_bytes([request[question_end - 2], request[question_end - 1]]);
+    let answer = query_type == 1 && query_class == 1;
+
+    let mut response = Vec::with_capacity(question_end + 16);
+    response.extend_from_slice(&request[..2]);
+    response.extend_from_slice(&0x8180_u16.to_be_bytes());
+    response.extend_from_slice(&1_u16.to_be_bytes());
+    response.extend_from_slice(&(if answer { 1_u16 } else { 0 }).to_be_bytes());
+    response.extend_from_slice(&0_u16.to_be_bytes());
+    response.extend_from_slice(&0_u16.to_be_bytes());
+    response.extend_from_slice(&request[12..question_end]);
+    if answer {
+        response.extend_from_slice(&[
+            0xc0, 0x0c, // name: pointer to the question
+            0x00, 0x01, // type: A
+            0x00, 0x01, // class: IN
+            0x00, 0x00, 0x00, 0x00, // TTL: do not cache across activities
+            0x00, 0x04, // address length
+            127, 0, 0, 1,
+        ]);
+    }
+    response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::dns_response;
+
+    #[test]
+    fn dns_a_query_resolves_to_loopback() {
+        let query = [
+            0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, b'e',
+            b'x', b'a', b'm', b'p', b'l', b'e', 0x03, b'c', b'o', b'm', 0x00, 0x00, 0x01, 0x00,
+            0x01,
+        ];
+        let response = dns_response(&query);
+        assert_eq!(&response[..2], &[0x12, 0x34]);
+        assert_eq!(&response[6..8], &[0x00, 0x01]);
+        assert_eq!(&response[response.len() - 4..], &[127, 0, 0, 1]);
+    }
+
+    #[test]
+    fn dns_aaaa_query_has_no_answer() {
+        let query = [
+            0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, b'x',
+            0x00, 0x00, 0x1c, 0x00, 0x01,
+        ];
+        let response = dns_response(&query);
+        assert_eq!(&response[6..8], &[0x00, 0x00]);
+        assert_eq!(response.len(), query.len());
+    }
 }
 
 fn tls_config(allowed: &str) -> Result<Arc<ServerConfig>> {
