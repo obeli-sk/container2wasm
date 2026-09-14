@@ -1,0 +1,121 @@
+name: activity-vm-runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_image:
+        description: Source image pinned by digest, for example debian:bookworm-slim@sha256:...
+        required: true
+        type: string
+      tag:
+        description: Docker Hub tag
+        required: true
+        type: string
+      ref:
+        description: Branch, tag, or full commit SHA to build
+        required: false
+        type: string
+      push:
+        description: Push the runtime to Docker Hub
+        required: false
+        default: false
+        type: boolean
+      optimization_mode:
+        description: c2w optimization mode
+        required: false
+        default: native
+        type: choice
+        options:
+          - native
+          - wizer
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash -xe {0}
+
+env:
+  IMAGE_BASE: docker.io/getobelisk/activity-vm-runtime
+  OUTPUT_DIR: ${{ github.workspace }}/builds
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Record build parameters
+        env:
+          SOURCE_IMAGE: ${{ inputs.source_image }}
+          RUNTIME_TAG: ${{ inputs.tag }}
+          SOURCE_REF: ${{ inputs.ref }}
+          PUSH_RUNTIME: ${{ inputs.push }}
+          OPTIMIZATION_MODE: ${{ inputs.optimization_mode }}
+        run: |
+          printf 'source_image=%s\ntag=%s\nref=%s\npush=%s\noptimization_mode=%s\n' \
+            "$SOURCE_IMAGE" "$RUNTIME_TAG" "$SOURCE_REF" "$PUSH_RUNTIME" "$OPTIMIZATION_MODE"
+          {
+            printf '## Activity VM runtime build\n\n'
+            printf '| Parameter | Value |\n| --- | --- |\n'
+            printf '| Source image | %s |\n' "$SOURCE_IMAGE"
+            printf '| Tag | %s |\n' "$RUNTIME_TAG"
+            printf '| Ref | %s |\n' "$SOURCE_REF"
+            printf '| Push | %s |\n' "$PUSH_RUNTIME"
+            printf '| Optimization mode | %s |\n' "$OPTIMIZATION_MODE"
+            printf '| Commit | %s |\n' "$GITHUB_SHA"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          docker system prune --all --force
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 1.26.x
+
+      - name: Build c2w
+        run: make c2w
+
+      - name: Build activity VM runtime
+        env:
+          SOURCE_IMAGE: ${{ inputs.source_image }}
+          OPTIMIZATION_MODE: ${{ inputs.optimization_mode }}
+        run: |
+          mkdir -p "$OUTPUT_DIR"
+          ./out/c2w \
+            --assets="$GITHUB_WORKSPACE" \
+            --build-arg=CONTAINER_CAP_SYS_ADMIN=true \
+            --build-arg="OPTIMIZATION_MODE=$OPTIMIZATION_MODE" \
+            "$SOURCE_IMAGE" \
+            "$OUTPUT_DIR/activity-vm-runtime.wasm"
+          sha256sum "$OUTPUT_DIR/activity-vm-runtime.wasm" | tee "$OUTPUT_DIR/SHA256SUMS"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: activity-vm-runtime-${{ inputs.tag }}
+          path: builds/
+          if-no-files-found: error
+          retention-days: 7
+
+      - uses: oras-project/setup-oras@v1
+        if: ${{ inputs.push }}
+
+      - name: Push runtime to Docker Hub
+        if: ${{ inputs.push }}
+        env:
+          DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+          DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          echo "$DOCKER_HUB_TOKEN" | oras login docker.io -u "$DOCKER_HUB_USERNAME" --password-stdin
+          cd "$OUTPUT_DIR"
+          oras push "${IMAGE_BASE}:${TAG}" \
+            --artifact-type application/wasm \
+            "activity-vm-runtime.wasm:application/wasm" \
+            "SHA256SUMS:text/plain"
+          oras manifest fetch --descriptor "${IMAGE_BASE}:${TAG}"
