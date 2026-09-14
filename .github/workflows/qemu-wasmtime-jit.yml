@@ -30,6 +30,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: qemu-wasmtime-jit-${{ github.ref }}
+  cancel-in-progress: true
+
 defaults:
   run:
     shell: bash -xe {0}

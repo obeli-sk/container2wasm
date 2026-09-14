@@ -755,7 +755,7 @@ RUN apt-get update && apt-get install -y gettext-base && mkdir /out
 COPY --link --from=assets /config/qemu/args-x86_64.json.template /args.json.template
 RUN MIGRATION_FLAGS= ; \
     if test "${QEMU_MIGRATION}" = "true"  ; then \
-      MIGRATION_FLAGS='"-incoming", "file:/pack/vm.state",' ; \
+      MIGRATION_FLAGS='"-incoming", "file:/image/vm.state",' ; \
     fi && \
     cat /args.json.template | LOGLEVEL=$LINUX_LOGLEVEL MEMORY_SIZE=$VM_MEMORY_SIZE_MB CORE_NUMS=$VM_CORE_NUMS MIGRATION="" WASI0_PATH=/tmp/wasi0 WASI1_PATH=/tmp/wasi1 envsubst > /out/args-before-cp.json && \
     cat /args.json.template | LOGLEVEL=$LINUX_LOGLEVEL MEMORY_SIZE=$VM_MEMORY_SIZE_MB CORE_NUMS=$VM_CORE_NUMS MIGRATION=$MIGRATION_FLAGS WASI0_PATH=/ WASI1_PATH=/pack envsubst > /out/args.json
@@ -816,6 +816,7 @@ RUN cp /qemu/pc-bios/kvmvapic.bin /pack/
 RUN cp /qemu/pc-bios/linuxboot_dma.bin /pack/
 RUN cp /qemu/pc-bios/vgabios-stdvga.bin /pack/
 RUN cp /qemu/pc-bios/efi-virtio.rom /pack/
+RUN ln -s /pack /image
 
 COPY --link --from=get-qemu-state-dev /out/get-qemu-state /get-qemu-state
 COPY --link --from=qemu-config-dev-amd64 /out/args-before-cp.json /
@@ -866,14 +867,14 @@ RUN if test "${QEMU_MIGRATION}" = "true"  ; then /get-qemu-state -output=/pack/v
 FROM qemu-emscripten-dev AS qemu-emscripten-dev-amd64
 ARG LOAD_MODE
 ARG QEMU_WASMTIME_JIT
-COPY --from=qemu-x86_64-pack /pack /pack
+COPY --from=qemu-x86_64-pack /pack /image
 RUN JIT_CONFIGURE_FLAG= && JIT_LINK_FLAG= && \
     PTY_FLAGS="$XTERM_PTY_CFLAGS" && \
     RUNTIME_METHOD_FLAGS="-sEXPORTED_RUNTIME_METHODS=addFunction,removeFunction,TTY,FS" && \
     RUNTIME_FLAGS="-pthread -sPROXY_TO_PTHREAD=1 -sFORCE_FILESYSTEM -sEXPORT_ES6=1" && \
     if test "${QEMU_WASMTIME_JIT}" = "true"; then \
       JIT_CONFIGURE_FLAG=--enable-wasmtime-jit-bridge; \
-      JIT_LINK_FLAG="-sERROR_ON_UNDEFINED_SYMBOLS=0 -Wl,--export-memory --embed-file /pack"; \
+      JIT_LINK_FLAG="-sERROR_ON_UNDEFINED_SYMBOLS=0 -Wl,--export-memory --embed-file /image"; \
       PTY_FLAGS=; \
       RUNTIME_METHOD_FLAGS=; \
       RUNTIME_FLAGS="-sSTANDALONE_WASM=1 -sWASMFS=1"; \
