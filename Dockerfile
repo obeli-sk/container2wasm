@@ -127,6 +127,9 @@ RUN mkdir -p /out/oci/rootfs /out/oci/bundle && \
 RUN if test -f image.json; then mv image.json /out/oci/ ; fi && \
     if test -f spec.json; then mv spec.json /out/oci/ ; fi
 RUN mv initconfig.json /out/oci/
+RUN install -D -m 755 \
+    /work/activity-vm-assets/obelisk-activity-vm-http-proxy \
+    /out/oci/rootfs/usr/local/libexec/obelisk/obelisk-activity-vm-http-proxy
 
 FROM ubuntu:22.04 AS gcc-riscv64-linux-gnu-base
 RUN apt-get update && apt-get install -y gcc-riscv64-linux-gnu libc-dev-riscv64-cross git make
