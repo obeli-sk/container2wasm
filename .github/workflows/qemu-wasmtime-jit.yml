@@ -1,6 +1,9 @@
 name: qemu-wasmtime-jit
 
 on:
+  push:
+    branches:
+      - feat/activity-vm-qemu-jit
   workflow_dispatch:
     inputs:
       ref:
