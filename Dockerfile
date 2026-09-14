@@ -36,7 +36,7 @@ ARG BOCHS_REPO=https://github.com/ktock/Bochs
 ARG BOCHS_REPO_VERSION=a88d1f687ec83ff82b5318f59dcecb8dab44fc83
 
 ARG QEMU_REPO=https://github.com/obeli-sk/qemu-wasmtime
-ARG QEMU_REPO_VERSION=4d62cf2a36d1dd056be7d5a4b3e35ee1a25518b3
+ARG QEMU_REPO_VERSION=ac150930ed4841b5d59fe2b07ce28a29e8b76dd0
 ARG QEMU_WASMTIME_JIT=false
 
 ARG SOURCE_REPO=https://github.com/container2wasm/container2wasm
