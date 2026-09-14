@@ -886,7 +886,9 @@ RUN JIT_CONFIGURE_FLAG= && JIT_LINK_FLAG= && \
     --extra-cflags="$EXTRA_CFLAGS" --extra-cxxflags="$EXTRA_CFLAGS" \
     --extra-ldflags="$JIT_LINK_FLAG $RUNTIME_METHOD_FLAGS" && \
     emmake make -j $(nproc) qemu-system-x86_64
-RUN if test "${LOAD_MODE}" = "single" ; then \
+RUN if test "${QEMU_WASMTIME_JIT}" = "true"; then \
+      : ; \
+    elif test "${LOAD_MODE}" = "single" ; then \
       /emsdk/upstream/emscripten/tools/file_packager.py qemu-system-x86_64.data --preload /pack > load.js ; \
     else \
       mkdir /load && \
