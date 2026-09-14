@@ -88,7 +88,7 @@ jobs:
             "$SOURCE_IMAGE" \
             "$OUTPUT_DIR/"
           cd "$OUTPUT_DIR"
-          find . -type f ! -name SHA256SUMS -print0 \
+          find . -type f ! -name SHA256SUMS -printf '%P\0' \
             | sort -z \
             | xargs -0 sha256sum \
             | tee SHA256SUMS
@@ -108,7 +108,7 @@ jobs:
         env:
           DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
           DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
-          TAG: ${{ inputs.tag }}
+          TAG: ${{ inputs.tag || 'qemu-jit-poc' }}
         run: |
           echo "$DOCKER_HUB_TOKEN" | oras login docker.io -u "$DOCKER_HUB_USERNAME" --password-stdin
           cd "$OUTPUT_DIR"
