@@ -864,11 +864,13 @@ FROM qemu-emscripten-dev AS qemu-emscripten-dev-amd64
 ARG LOAD_MODE
 ARG QEMU_WASMTIME_JIT
 RUN JIT_CONFIGURE_FLAG= && JIT_LINK_FLAG= && \
+    RUNTIME_FLAGS="-pthread -sPROXY_TO_PTHREAD=1 -sFORCE_FILESYSTEM -sEXPORT_ES6=1" && \
     if test "${QEMU_WASMTIME_JIT}" = "true"; then \
       JIT_CONFIGURE_FLAG=--enable-wasmtime-jit-bridge; \
-      JIT_LINK_FLAG="-sERROR_ON_UNDEFINED_SYMBOLS=0 -sSTANDALONE_WASM=1"; \
+      JIT_LINK_FLAG=-sERROR_ON_UNDEFINED_SYMBOLS=0; \
+      RUNTIME_FLAGS="-sSTANDALONE_WASM=1 -sWASMFS=1"; \
     fi && \
-    EXTRA_CFLAGS="-O3 -g -Wno-error=unused-command-line-argument -Wno-error=unused-but-set-variable -matomics -mbulk-memory -DNDEBUG -DG_DISABLE_ASSERT -D_GNU_SOURCE -sASYNCIFY=1 -pthread -sPROXY_TO_PTHREAD=1 -sFORCE_FILESYSTEM -sALLOW_TABLE_GROWTH -sTOTAL_MEMORY=$((3000*1024*1024)) -sWASM_BIGINT -sMALLOC=emmalloc -sEXPORT_ES6=1 -sASYNCIFY_IMPORTS=ffi_call_js $XTERM_PTY_CFLAGS " && \
+    EXTRA_CFLAGS="-O3 -g -Wno-error=unused-command-line-argument -Wno-error=unused-but-set-variable -matomics -mbulk-memory -DNDEBUG -DG_DISABLE_ASSERT -D_GNU_SOURCE -sASYNCIFY=1 $RUNTIME_FLAGS -sALLOW_TABLE_GROWTH -sTOTAL_MEMORY=$((3000*1024*1024)) -sWASM_BIGINT -sMALLOC=emmalloc -sASYNCIFY_IMPORTS=ffi_call_js $XTERM_PTY_CFLAGS " && \
     emconfigure ../configure --static --target-list=x86_64-softmmu --cpu=wasm32 --cross-prefix= \
     ${JIT_CONFIGURE_FLAG} \
     --without-default-features --enable-system --with-coroutine=fiber --enable-virtfs \
