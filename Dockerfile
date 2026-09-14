@@ -35,8 +35,9 @@ ARG TINYEMU_REPO_VERSION=e4e9bd198f9c0505ab4c77a6a9d038059cd1474a
 ARG BOCHS_REPO=https://github.com/ktock/Bochs
 ARG BOCHS_REPO_VERSION=a88d1f687ec83ff82b5318f59dcecb8dab44fc83
 
-ARG QEMU_REPO=https://github.com/ktock/qemu-wasm
-ARG QEMU_REPO_VERSION=8604ed49a3cde392890b014a8d5a959c8a2fe72a
+ARG QEMU_REPO=https://github.com/obeli-sk/qemu-wasmtime
+ARG QEMU_REPO_VERSION=4d62cf2a36d1dd056be7d5a4b3e35ee1a25518b3
+ARG QEMU_WASMTIME_JIT=false
 
 ARG SOURCE_REPO=https://github.com/container2wasm/container2wasm
 ARG SOURCE_REPO_VERSION=v0.8.4
@@ -82,9 +83,10 @@ FROM ubuntu:22.04 AS qemu-repo-base
 ARG QEMU_REPO
 ARG QEMU_REPO_VERSION
 RUN apt-get update && apt-get install -y git
-RUN git clone --depth 100 ${QEMU_REPO} /qemu && \
-    cd /qemu && \
-    git checkout ${QEMU_REPO_VERSION}
+RUN git init /qemu && \
+    git -C /qemu remote add origin ${QEMU_REPO} && \
+    git -C /qemu fetch --depth 1 origin ${QEMU_REPO_VERSION} && \
+    git -C /qemu checkout --detach FETCH_HEAD
 FROM scratch AS qemu-repo
 COPY --link --from=qemu-repo-base /qemu /
 
@@ -860,8 +862,12 @@ RUN if test "${QEMU_MIGRATION}" = "true"  ; then /get-qemu-state -output=/pack/v
 
 FROM qemu-emscripten-dev AS qemu-emscripten-dev-amd64
 ARG LOAD_MODE
-RUN EXTRA_CFLAGS="-O3 -g -Wno-error=unused-command-line-argument -Wno-error=unused-but-set-variable -matomics -mbulk-memory -DNDEBUG -DG_DISABLE_ASSERT -D_GNU_SOURCE -sASYNCIFY=1 -pthread -sPROXY_TO_PTHREAD=1 -sFORCE_FILESYSTEM -sALLOW_TABLE_GROWTH -sTOTAL_MEMORY=$((3000*1024*1024)) -sWASM_BIGINT -sMALLOC=emmalloc -sEXPORT_ES6=1 -sASYNCIFY_IMPORTS=ffi_call_js $XTERM_PTY_CFLAGS " ; \
+ARG QEMU_WASMTIME_JIT
+RUN JIT_FLAG= && \
+    if test "${QEMU_WASMTIME_JIT}" = "true"; then JIT_FLAG=--enable-wasmtime-jit-bridge; fi && \
+    EXTRA_CFLAGS="-O3 -g -Wno-error=unused-command-line-argument -Wno-error=unused-but-set-variable -matomics -mbulk-memory -DNDEBUG -DG_DISABLE_ASSERT -D_GNU_SOURCE -sASYNCIFY=1 -pthread -sPROXY_TO_PTHREAD=1 -sFORCE_FILESYSTEM -sALLOW_TABLE_GROWTH -sTOTAL_MEMORY=$((3000*1024*1024)) -sWASM_BIGINT -sMALLOC=emmalloc -sEXPORT_ES6=1 -sASYNCIFY_IMPORTS=ffi_call_js $XTERM_PTY_CFLAGS " && \
     emconfigure ../configure --static --target-list=x86_64-softmmu --cpu=wasm32 --cross-prefix= \
+    ${JIT_FLAG} \
     --without-default-features --enable-system --with-coroutine=fiber --enable-virtfs \
     --extra-cflags="$EXTRA_CFLAGS" --extra-cxxflags="$EXTRA_CFLAGS" --extra-ldflags="-sEXPORTED_RUNTIME_METHODS=addFunction,removeFunction,TTY,FS" && \
     emmake make -j $(nproc) qemu-system-x86_64
@@ -893,6 +899,9 @@ FROM js-qemu-amd64-base AS js-qemu-amd64-separated
 COPY --link --from=qemu-emscripten-dev-amd64 /load /
 
 FROM js-qemu-amd64-${LOAD_MODE} AS js-qemu-amd64
+
+FROM scratch AS qemu-wasmtime-jit-amd64
+COPY --link --from=qemu-emscripten-dev-amd64 /qemu/build/qemu-system-x86_64.wasm /
 
 FROM qemu-emscripten-dev AS qemu-emscripten-dev-aarch64
 ARG LOAD_MODE

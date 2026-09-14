@@ -216,6 +216,9 @@ Options
 - `--help, -h`: show help
 - `--version, -v: `print the version
 
+The experimental QEMU-to-Wasmtime build and its reproducible parameters are
+documented in [docs/wasmtime-jit.md](./docs/wasmtime-jit.md).
+
 ### c2w-net
 
 Runs the user-space network stack used for networking support in converted WASM images.
