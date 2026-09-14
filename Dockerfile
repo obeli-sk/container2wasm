@@ -33,8 +33,8 @@ ARG OPTIMIZATION_MODE=wizer # "wizer" or "native"
 ARG TINYEMU_REPO=https://github.com/ktock/tinyemu-c2w
 ARG TINYEMU_REPO_VERSION=e4e9bd198f9c0505ab4c77a6a9d038059cd1474a
 
-ARG BOCHS_REPO=https://github.com/ktock/Bochs
-ARG BOCHS_REPO_VERSION=a88d1f687ec83ff82b5318f59dcecb8dab44fc83
+ARG BOCHS_REPO=https://github.com/obeli-sk/bochs-c2w
+ARG BOCHS_REPO_VERSION=86964d7dd68711afa075dcdb267106aef40f83b6
 
 ARG QEMU_REPO=https://github.com/ktock/qemu-wasm
 ARG QEMU_REPO_VERSION=8604ed49a3cde392890b014a8d5a959c8a2fe72a
