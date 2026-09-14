@@ -863,13 +863,17 @@ RUN if test "${QEMU_MIGRATION}" = "true"  ; then /get-qemu-state -output=/pack/v
 FROM qemu-emscripten-dev AS qemu-emscripten-dev-amd64
 ARG LOAD_MODE
 ARG QEMU_WASMTIME_JIT
-RUN JIT_FLAG= && \
-    if test "${QEMU_WASMTIME_JIT}" = "true"; then JIT_FLAG=--enable-wasmtime-jit-bridge; fi && \
+RUN JIT_CONFIGURE_FLAG= && JIT_LINK_FLAG= && \
+    if test "${QEMU_WASMTIME_JIT}" = "true"; then \
+      JIT_CONFIGURE_FLAG=--enable-wasmtime-jit-bridge; \
+      JIT_LINK_FLAG=-sERROR_ON_UNDEFINED_SYMBOLS=0; \
+    fi && \
     EXTRA_CFLAGS="-O3 -g -Wno-error=unused-command-line-argument -Wno-error=unused-but-set-variable -matomics -mbulk-memory -DNDEBUG -DG_DISABLE_ASSERT -D_GNU_SOURCE -sASYNCIFY=1 -pthread -sPROXY_TO_PTHREAD=1 -sFORCE_FILESYSTEM -sALLOW_TABLE_GROWTH -sTOTAL_MEMORY=$((3000*1024*1024)) -sWASM_BIGINT -sMALLOC=emmalloc -sEXPORT_ES6=1 -sASYNCIFY_IMPORTS=ffi_call_js $XTERM_PTY_CFLAGS " && \
     emconfigure ../configure --static --target-list=x86_64-softmmu --cpu=wasm32 --cross-prefix= \
-    ${JIT_FLAG} \
+    ${JIT_CONFIGURE_FLAG} \
     --without-default-features --enable-system --with-coroutine=fiber --enable-virtfs \
-    --extra-cflags="$EXTRA_CFLAGS" --extra-cxxflags="$EXTRA_CFLAGS" --extra-ldflags="-sEXPORTED_RUNTIME_METHODS=addFunction,removeFunction,TTY,FS" && \
+    --extra-cflags="$EXTRA_CFLAGS" --extra-cxxflags="$EXTRA_CFLAGS" \
+    --extra-ldflags="$JIT_LINK_FLAG -sEXPORTED_RUNTIME_METHODS=addFunction,removeFunction,TTY,FS" && \
     emmake make -j $(nproc) qemu-system-x86_64
 COPY --from=qemu-x86_64-pack /pack /pack
 RUN if test "${LOAD_MODE}" = "single" ; then \
