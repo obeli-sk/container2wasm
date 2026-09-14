@@ -44,7 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.ref || github.sha }}
 
       - name: Free disk space
         run: |
@@ -74,7 +74,7 @@ jobs:
 
       - name: Build bridge-enabled QEMU
         env:
-          SOURCE_IMAGE: ${{ inputs.source_image }}
+          SOURCE_IMAGE: ${{ inputs.source_image || 'alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc' }}
         run: |
           mkdir -p "$OUTPUT_DIR"
           ./out/c2w \
@@ -88,7 +88,7 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: qemu-wasmtime-jit-${{ inputs.tag }}
+          name: qemu-wasmtime-jit-${{ inputs.tag || 'qemu-jit-poc' }}
           path: builds/
           if-no-files-found: error
           retention-days: 7
