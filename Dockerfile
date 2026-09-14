@@ -872,7 +872,7 @@ RUN JIT_CONFIGURE_FLAG= && JIT_LINK_FLAG= && \
     RUNTIME_FLAGS="-pthread -sPROXY_TO_PTHREAD=1 -sFORCE_FILESYSTEM -sEXPORT_ES6=1" && \
     if test "${QEMU_WASMTIME_JIT}" = "true"; then \
       JIT_CONFIGURE_FLAG=--enable-wasmtime-jit-bridge; \
-      JIT_LINK_FLAG=-sERROR_ON_UNDEFINED_SYMBOLS=0; \
+      JIT_LINK_FLAG="-sERROR_ON_UNDEFINED_SYMBOLS=0 -Wl,--export-memory"; \
       PTY_FLAGS=; \
       RUNTIME_METHOD_FLAGS=; \
       RUNTIME_FLAGS="-sSTANDALONE_WASM=1 -sWASMFS=1"; \
