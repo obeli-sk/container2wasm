@@ -52,6 +52,20 @@ jobs:
         with:
           go-version: 1.26.x
 
+      - name: Build guest HTTP proxy
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes musl-tools
+          rustup toolchain install 1.98.1 --profile minimal --target x86_64-unknown-linux-musl
+          CARGO_TARGET_DIR="$RUNNER_TEMP/activity-vm-proxy-target" \
+            cargo +1.98.1 build --locked --release \
+            --target x86_64-unknown-linux-musl \
+            --manifest-path extras/obelisk-activity-vm-http-proxy/Cargo.toml
+          mkdir -p activity-vm-assets
+          install -m 755 \
+            "$RUNNER_TEMP/activity-vm-proxy-target/x86_64-unknown-linux-musl/release/obelisk-activity-vm-http-proxy" \
+            activity-vm-assets/obelisk-activity-vm-http-proxy
+
       - name: Build c2w
         run: make c2w
 
