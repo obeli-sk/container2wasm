@@ -281,16 +281,6 @@ RUN curl -o wasi-sdk.tar.gz -fSL https://github.com/WebAssembly/wasi-sdk/release
 ENV WASI_SDK_PATH=/wasi/wasi-sdk-${WASI_SDK_VERSION_FULL}
 
 WORKDIR /work/
-RUN git clone https://github.com/kateinoigakukun/wasi-vfs.git --recurse-submodules && \
-    cd wasi-vfs && \
-    git checkout "${WASI_VFS_VERSION}" && \
-    cargo build --target wasm32-unknown-unknown && \
-    cargo build --package wasi-vfs-cli && \
-    mkdir -p /tools/wasi-vfs/ && \
-    mv target/debug/wasi-vfs target/wasm32-unknown-unknown/debug/libwasi_vfs.a /tools/wasi-vfs/ && \
-    cargo clean
-
-WORKDIR /work/
 RUN git clone https://github.com/bytecodealliance/wizer && \
     cd wizer && \
     git checkout "${WIZER_VERSION}" && \
@@ -299,6 +289,18 @@ RUN git clone https://github.com/bytecodealliance/wizer && \
     cargo build --bin wizer --all-features && \
     mkdir -p /tools/wizer/ && \
     mv include target/debug/wizer /tools/wizer/ && \
+    cargo clean
+
+WORKDIR /work/
+RUN git clone https://github.com/kateinoigakukun/wasi-vfs.git --recurse-submodules && \
+    cd wasi-vfs && \
+    git checkout "${WASI_VFS_VERSION}" && \
+    sed -i 's#wizer = { git = "https://github.com/bytecodealliance/wizer.git", rev = "[^"]*" }#wizer = { path = "/work/wizer" }#' crates/wasi-vfs-cli/Cargo.toml && \
+    grep -F 'wizer = { path = "/work/wizer" }' crates/wasi-vfs-cli/Cargo.toml && \
+    cargo build --target wasm32-unknown-unknown && \
+    cargo build --package wasi-vfs-cli && \
+    mkdir -p /tools/wasi-vfs/ && \
+    mv target/debug/wasi-vfs target/wasm32-unknown-unknown/debug/libwasi_vfs.a /tools/wasi-vfs/ && \
     cargo clean
 
 COPY --link --from=tinyemu-repo / /tinyemu
@@ -977,16 +979,6 @@ RUN curl -o wasi-sdk.tar.gz -fSL https://github.com/WebAssembly/wasi-sdk/release
 ENV WASI_SDK_PATH=/wasi/wasi-sdk-${WASI_SDK_VERSION_FULL}
 
 WORKDIR /work/
-RUN git clone https://github.com/kateinoigakukun/wasi-vfs.git --recurse-submodules && \
-    cd wasi-vfs && \
-    git checkout "${WASI_VFS_VERSION}" && \
-    cargo build --target wasm32-unknown-unknown && \
-    cargo build --package wasi-vfs-cli && \
-    mkdir -p /tools/wasi-vfs/ && \
-    mv target/debug/wasi-vfs target/wasm32-unknown-unknown/debug/libwasi_vfs.a /tools/wasi-vfs/ && \
-    cargo clean
-
-WORKDIR /work/
 RUN git clone https://github.com/bytecodealliance/wizer && \
     cd wizer && \
     git checkout "${WIZER_VERSION}" && \
@@ -995,6 +987,18 @@ RUN git clone https://github.com/bytecodealliance/wizer && \
     cargo build --bin wizer --all-features && \
     mkdir -p /tools/wizer/ && \
     mv include target/debug/wizer /tools/wizer/ && \
+    cargo clean
+
+WORKDIR /work/
+RUN git clone https://github.com/kateinoigakukun/wasi-vfs.git --recurse-submodules && \
+    cd wasi-vfs && \
+    git checkout "${WASI_VFS_VERSION}" && \
+    sed -i 's#wizer = { git = "https://github.com/bytecodealliance/wizer.git", rev = "[^"]*" }#wizer = { path = "/work/wizer" }#' crates/wasi-vfs-cli/Cargo.toml && \
+    grep -F 'wizer = { path = "/work/wizer" }' crates/wasi-vfs-cli/Cargo.toml && \
+    cargo build --target wasm32-unknown-unknown && \
+    cargo build --package wasi-vfs-cli && \
+    mkdir -p /tools/wasi-vfs/ && \
+    mv target/debug/wasi-vfs target/wasm32-unknown-unknown/debug/libwasi_vfs.a /tools/wasi-vfs/ && \
     cargo clean
 
 RUN wget -O /tmp/binaryen.tar.gz https://github.com/WebAssembly/binaryen/releases/download/version_${BINARYEN_VERSION}/binaryen-version_${BINARYEN_VERSION}-x86_64-linux.tar.gz
