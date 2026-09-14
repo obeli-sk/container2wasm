@@ -1,0 +1,94 @@
+name: qemu-wasmtime-jit
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag, or full commit SHA to build
+        required: true
+        default: feat/wasmtime-jit-bridge
+        type: string
+      source_image:
+        description: Source image pinned by digest
+        required: true
+        default: "alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc"
+        type: string
+      tag:
+        description: Docker Hub tag
+        required: true
+        default: qemu-jit-poc
+        type: string
+      push:
+        description: Push the experiment to Docker Hub
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash -xe {0}
+
+env:
+  IMAGE_BASE: docker.io/getobelisk/qemu-wasmtime-jit
+  OUTPUT_DIR: ${{ github.workspace }}/builds
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          docker system prune --all --force
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 1.26.x
+
+      - name: Build c2w
+        run: make c2w
+
+      - name: Build bridge-enabled QEMU
+        env:
+          SOURCE_IMAGE: ${{ inputs.source_image }}
+        run: |
+          mkdir -p "$OUTPUT_DIR"
+          ./out/c2w \
+            --assets="$GITHUB_WORKSPACE" \
+            --target-stage=qemu-wasmtime-jit-amd64 \
+            --build-arg=QEMU_WASMTIME_JIT=true \
+            "$SOURCE_IMAGE" \
+            "$OUTPUT_DIR/"
+          sha256sum "$OUTPUT_DIR/qemu-system-x86_64.wasm" | tee "$OUTPUT_DIR/SHA256SUMS"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: qemu-wasmtime-jit-${{ inputs.tag }}
+          path: builds/
+          if-no-files-found: error
+          retention-days: 7
+
+      - uses: oras-project/setup-oras@v1
+        if: ${{ inputs.push }}
+
+      - name: Push experiment to Docker Hub
+        if: ${{ inputs.push }}
+        env:
+          DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+          DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          echo "$DOCKER_HUB_TOKEN" | oras login docker.io -u "$DOCKER_HUB_USERNAME" --password-stdin
+          cd "$OUTPUT_DIR"
+          oras push "${IMAGE_BASE}:${TAG}" \
+            --artifact-type application/wasm \
+            "qemu-system-x86_64.wasm:application/wasm" \
+            "SHA256SUMS:text/plain"
+          oras manifest fetch --descriptor "${IMAGE_BASE}:${TAG}"
