@@ -84,7 +84,10 @@ jobs:
             "$SOURCE_IMAGE" \
             "$OUTPUT_DIR/"
           cd "$OUTPUT_DIR"
-          sha256sum qemu-system-x86_64.wasm | tee SHA256SUMS
+          find . -type f ! -name SHA256SUMS -print0 \
+            | sort -z \
+            | xargs -0 sha256sum \
+            | tee SHA256SUMS
 
       - uses: actions/upload-artifact@v7
         with:
@@ -108,5 +111,6 @@ jobs:
           oras push "${IMAGE_BASE}:${TAG}" \
             --artifact-type application/wasm \
             "qemu-system-x86_64.wasm:application/wasm" \
+            "args.json:application/json" \
             "SHA256SUMS:text/plain"
           oras manifest fetch --descriptor "${IMAGE_BASE}:${TAG}"
