@@ -30,6 +30,7 @@ const MAX_HEADER: usize = 64 * 1024;
 const MAX_BODY: usize = 1024 * 1024;
 const HOST_ALIAS: &str = "obelisk-host";
 const HOST_TARGET: &str = "localhost";
+const OBELISK_HOST_HTTP_PORT: u16 = 5005;
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Serialize)]
@@ -67,17 +68,26 @@ fn main() -> Result<()> {
     fs::create_dir_all(&queue)?;
     let tls = tls_config(&allowed)?;
     let http = TcpListener::bind(("127.0.0.1", 80)).context("binding HTTP listener")?;
+    let host_http = TcpListener::bind(("127.0.0.1", OBELISK_HOST_HTTP_PORT))
+        .context("binding obelisk-host HTTP listener")?;
     let https = TcpListener::bind(("127.0.0.1", 443)).context("binding HTTPS listener")?;
     let dns = UdpSocket::bind(("127.0.0.1", 53)).context("binding DNS listener")?;
     let http_queue = queue.clone();
+    let host_http_queue = queue.clone();
     thread::spawn(move || listen_dns(dns));
     thread::spawn(move || listen_http(http, &http_queue));
+    thread::spawn(move || listen_http(host_http, &host_http_queue));
     fs::write("/tmp/obelisk-activity-vm-network-ready", b"")?;
     listen_https(https, &queue, &tls)
 }
 
 fn listen_http(listener: TcpListener, queue: &Path) {
-    eprintln!("obelisk-activity-vm HTTP bridge listening on 127.0.0.1:80");
+    eprintln!(
+        "obelisk-activity-vm HTTP bridge listening on {}",
+        listener
+            .local_addr()
+            .map_or_else(|_| "unknown address".to_owned(), |addr| addr.to_string())
+    );
     for connection in listener.incoming() {
         match connection {
             Ok(stream) => {
