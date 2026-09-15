@@ -36,7 +36,7 @@ ARG BOCHS_REPO=https://github.com/ktock/Bochs
 ARG BOCHS_REPO_VERSION=a88d1f687ec83ff82b5318f59dcecb8dab44fc83
 
 ARG QEMU_REPO=https://github.com/obeli-sk/qemu-wasmtime
-ARG QEMU_REPO_VERSION=70aa4263efa65c00384f42273be307d38adfe706
+ARG QEMU_REPO_VERSION=c9de8605a2df96408a23114eee01778c440bfd81
 ARG QEMU_WASMTIME_JIT=false
 ARG QEMU_WASMTIME_DISABLE_JIT=false
 
@@ -877,13 +877,12 @@ ARG QEMU_WASMTIME_JIT
 ARG QEMU_WASMTIME_DISABLE_JIT
 # NODERAWFS is a Wasm-side lazy host-filesystem backend. Obelisk implements
 # its `_wasmfs_node_*` import ABI directly, without Node or JavaScript.
-RUN JIT_LINK_FLAG= && TCG_CONFIGURE_FLAG= && TABLE_FLAGS="-sALLOW_TABLE_GROWTH" && \
+RUN JIT_LINK_FLAG= && TCG_CONFIGURE_FLAG= && \
     PTY_FLAGS="$XTERM_PTY_CFLAGS" && \
     RUNTIME_METHOD_FLAGS="-sEXPORTED_RUNTIME_METHODS=addFunction,removeFunction,TTY,FS" && \
     RUNTIME_FLAGS="-pthread -sPROXY_TO_PTHREAD=1 -sFORCE_FILESYSTEM -sEXPORT_ES6=1" && \
     if test "${QEMU_WASMTIME_JIT}" = "true"; then \
-      JIT_LINK_FLAG="-sERROR_ON_UNDEFINED_SYMBOLS=0 -Wl,--import-table -Wl,--growable-table -Wl,--export-memory -Wl,--export=__syscall_poll"; \
-      TABLE_FLAGS=; \
+      JIT_LINK_FLAG="-sERROR_ON_UNDEFINED_SYMBOLS=0 -Wl,--export-memory -Wl,--export=__syscall_poll"; \
       PTY_FLAGS=; \
       RUNTIME_METHOD_FLAGS=; \
       RUNTIME_FLAGS="-pthread -sSTANDALONE_WASM=1 -sWASMFS=1 -sNODERAWFS=1"; \
@@ -891,15 +890,12 @@ RUN JIT_LINK_FLAG= && TCG_CONFIGURE_FLAG= && TABLE_FLAGS="-sALLOW_TABLE_GROWTH" 
     if test "${QEMU_WASMTIME_DISABLE_JIT}" = "true"; then \
       TCG_CONFIGURE_FLAG=--enable-tcg-interpreter; \
     fi && \
-    EXTRA_CFLAGS="-O3 -g -Wno-error=unused-command-line-argument -Wno-error=unused-but-set-variable -matomics -mbulk-memory -DNDEBUG -DG_DISABLE_ASSERT -D_GNU_SOURCE -sASYNCIFY=1 $RUNTIME_FLAGS $TABLE_FLAGS -sTOTAL_MEMORY=$((3000*1024*1024)) -sWASM_BIGINT -sMALLOC=emmalloc -sASYNCIFY_IMPORTS=ffi_call_js $PTY_FLAGS " && \
+    EXTRA_CFLAGS="-O3 -g -Wno-error=unused-command-line-argument -Wno-error=unused-but-set-variable -matomics -mbulk-memory -DNDEBUG -DG_DISABLE_ASSERT -D_GNU_SOURCE -sASYNCIFY=1 $RUNTIME_FLAGS -sALLOW_TABLE_GROWTH -sTOTAL_MEMORY=$((3000*1024*1024)) -sWASM_BIGINT -sMALLOC=emmalloc -sASYNCIFY_IMPORTS=ffi_call_js $PTY_FLAGS " && \
     emconfigure ../configure --static --target-list=x86_64-softmmu --cpu=wasm32 --cross-prefix= \
     ${TCG_CONFIGURE_FLAG} \
     --without-default-features --enable-system --with-coroutine=fiber --enable-virtfs \
     --extra-cflags="$EXTRA_CFLAGS" --extra-cxxflags="$EXTRA_CFLAGS" \
     --extra-ldflags="$JIT_LINK_FLAG $RUNTIME_METHOD_FLAGS" && \
-    if test "${QEMU_WASMTIME_JIT}" = "true"; then \
-      printf '%s\n' '#define HAVE_GETLOADAVG_FUNCTION 1' '#define CONFIG_MEMALIGN 1' '#define CONFIG_POSIX_MEMALIGN 1' >> config-host.h; \
-    fi && \
     emmake make -j $(nproc) qemu-system-x86_64
 RUN if test "${QEMU_WASMTIME_JIT}" = "true"; then \
       : ; \
