@@ -890,7 +890,7 @@ RUN JIT_LINK_FLAG= && TCG_CONFIGURE_FLAG= && \
     if test "${QEMU_WASMTIME_DISABLE_JIT}" = "true"; then \
       TCG_CONFIGURE_FLAG=--enable-tcg-interpreter; \
     fi && \
-    EXTRA_CFLAGS="-O3 -g -Wno-error=unused-command-line-argument -Wno-error=unused-but-set-variable -matomics -mbulk-memory -DNDEBUG -DG_DISABLE_ASSERT -D_GNU_SOURCE -sASYNCIFY=1 $RUNTIME_FLAGS -sALLOW_TABLE_GROWTH -sTOTAL_MEMORY=$((3000*1024*1024)) -sWASM_BIGINT -sMALLOC=emmalloc -sASYNCIFY_IMPORTS=ffi_call_js $PTY_FLAGS " && \
+    EXTRA_CFLAGS="-O3 -g -Wno-error=unused-command-line-argument -Wno-error=unused-but-set-variable -matomics -mbulk-memory -DNDEBUG -DG_DISABLE_ASSERT -D_GNU_SOURCE -DHAVE_GETLOADAVG_FUNCTION -sASYNCIFY=1 $RUNTIME_FLAGS -sALLOW_TABLE_GROWTH -sTOTAL_MEMORY=$((3000*1024*1024)) -sWASM_BIGINT -sMALLOC=emmalloc -sASYNCIFY_IMPORTS=ffi_call_js $PTY_FLAGS " && \
     emconfigure ../configure --static --target-list=x86_64-softmmu --cpu=wasm32 --cross-prefix= \
     ${TCG_CONFIGURE_FLAG} \
     --without-default-features --enable-system --with-coroutine=fiber --enable-virtfs \
