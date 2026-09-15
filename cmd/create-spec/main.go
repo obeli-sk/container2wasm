@@ -42,6 +42,7 @@ func main() {
 		externalBundle      = flag.Bool("external-bundle", false, "provide bundle externally during runtime")
 		noBinfmt            = flag.Bool("no-binfmt", false, "do not install binfmt")
 		activityVMHTTPProxy = flag.Bool("activity-vm-http-proxy", false, "route container HTTP through the activity VM guest proxy")
+		activityVMNetAdmin  = flag.Bool("activity-vm-net-admin", false, "grant CAP_NET_ADMIN to the activity VM container")
 	)
 	flag.Parse()
 	args := flag.Args()
@@ -65,7 +66,7 @@ func main() {
 		if err := os.WriteFile("image.json", cfgD, 0600); err != nil {
 			panic(err)
 		}
-		if err := createSpec(bytes.NewReader(cfgD), rootfs, *debug, *debugInit, *imageConfigPath, *runtimeConfigPath, *imageRootfsPath, *noVmtouch, *noBinfmt, *activityVMHTTPProxy); err != nil {
+		if err := createSpec(bytes.NewReader(cfgD), rootfs, *debug, *debugInit, *imageConfigPath, *runtimeConfigPath, *imageRootfsPath, *noVmtouch, *noBinfmt, *activityVMHTTPProxy, *activityVMNetAdmin); err != nil {
 			panic(err)
 		}
 	} else {
@@ -276,7 +277,7 @@ func unpackDocker(ctx context.Context, imgDir string, platform *ocispec.Platform
 	return nil, fmt.Errorf("target config not found")
 }
 
-func createSpec(r io.Reader, rootfs string, debug bool, debugInit bool, imageConfigPath, runtimeConfigPath, imageRootfsPath string, noVmtouch bool, noBinfmt bool, activityVMHTTPProxy bool) error {
+func createSpec(r io.Reader, rootfs string, debug bool, debugInit bool, imageConfigPath, runtimeConfigPath, imageRootfsPath string, noVmtouch bool, noBinfmt bool, activityVMHTTPProxy bool, activityVMNetAdmin bool) error {
 	if rootfs == "" {
 		return fmt.Errorf("rootfs path must be specified")
 	}
@@ -284,7 +285,7 @@ func createSpec(r io.Reader, rootfs string, debug bool, debugInit bool, imageCon
 	if err := json.NewDecoder(r).Decode(&config); err != nil {
 		return err
 	}
-	s, err := generateSpec(config, rootfs, activityVMHTTPProxy)
+	s, err := generateSpec(config, rootfs, activityVMHTTPProxy, activityVMNetAdmin)
 	if err != nil {
 		return err
 	}
@@ -315,7 +316,7 @@ func createSpec(r io.Reader, rootfs string, debug bool, debugInit bool, imageCon
 	return nil
 }
 
-func generateSpec(config ocispec.Image, rootfs string, activityVMHTTPProxy bool) (_ *specs.Spec, err error) {
+func generateSpec(config ocispec.Image, rootfs string, activityVMHTTPProxy bool, activityVMNetAdmin bool) (_ *specs.Spec, err error) {
 	ic := config.Config
 	if activityVMHTTPProxy {
 		ic.Env = append(ic.Env,
@@ -338,6 +339,12 @@ func generateSpec(config ocispec.Image, rootfs string, activityVMHTTPProxy bool)
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate spec: %w", err)
+	}
+	if activityVMNetAdmin {
+		capabilities := s.Process.Capabilities
+		capabilities.Bounding = append(capabilities.Bounding, "CAP_NET_ADMIN")
+		capabilities.Effective = append(capabilities.Effective, "CAP_NET_ADMIN")
+		capabilities.Permitted = append(capabilities.Permitted, "CAP_NET_ADMIN")
 	}
 	if username := ic.User; username != "" {
 		passwdPath, err := user.GetPasswdPath()

@@ -101,6 +101,7 @@ ARG NO_VMTOUCH
 ARG NO_BINFMT
 ARG EXTERNAL_BUNDLE
 ARG ACTIVITY_VM_HTTP_PROXY=false
+ARG ACTIVITY_VM_NET_ADMIN=false
 COPY --link --from=assets / /work
 COPY --link --from=assets /activity-vm-assets/obelisk-activity-vm-http-proxy \
     /work/activity-vm-assets/obelisk-activity-vm-http-proxy
@@ -129,6 +130,7 @@ RUN mkdir -p /out/oci/rootfs /out/oci/bundle && \
                 --runtime-config-path=/oci/spec.json \
                 --rootfs-path=/oci/rootfs \
                 --activity-vm-http-proxy=${ACTIVITY_VM_HTTP_PROXY} \
+                --activity-vm-net-admin=${ACTIVITY_VM_NET_ADMIN} \
                 /oci "${TARGETPLATFORM}" /out/oci/rootfs
 RUN if test -f image.json; then mv image.json /out/oci/ ; fi && \
     if test -f spec.json; then mv spec.json /out/oci/ ; fi
