@@ -42,7 +42,7 @@ func main() {
 		externalBundle      = flag.Bool("external-bundle", false, "provide bundle externally during runtime")
 		noBinfmt            = flag.Bool("no-binfmt", false, "do not install binfmt")
 		activityVMHTTPProxy = flag.Bool("activity-vm-http-proxy", false, "route container HTTP through the activity VM guest proxy")
-		activityVMNetAdmin  = flag.Bool("activity-vm-net-admin", false, "grant CAP_NET_ADMIN to the activity VM container")
+		activityVMNftables  = flag.Bool("activity-vm-nftables", false, "initialize activity VM nftables rules before snapshotting")
 	)
 	flag.Parse()
 	args := flag.Args()
@@ -66,11 +66,11 @@ func main() {
 		if err := os.WriteFile("image.json", cfgD, 0600); err != nil {
 			panic(err)
 		}
-		if err := createSpec(bytes.NewReader(cfgD), rootfs, *debug, *debugInit, *imageConfigPath, *runtimeConfigPath, *imageRootfsPath, *noVmtouch, *noBinfmt, *activityVMHTTPProxy, *activityVMNetAdmin); err != nil {
+		if err := createSpec(bytes.NewReader(cfgD), rootfs, *debug, *debugInit, *imageConfigPath, *runtimeConfigPath, *imageRootfsPath, *noVmtouch, *noBinfmt, *activityVMHTTPProxy, *activityVMNftables); err != nil {
 			panic(err)
 		}
 	} else {
-		bootConfig, err := generateBootConfig(*debug, *debugInit, *imageConfigPath, *runtimeConfigPath, *imageRootfsPath, *noVmtouch, "", true)
+		bootConfig, err := generateBootConfig(*debug, *debugInit, *imageConfigPath, *runtimeConfigPath, *imageRootfsPath, *noVmtouch, "", true, false)
 		if err != nil {
 			panic(err)
 		}
@@ -277,7 +277,7 @@ func unpackDocker(ctx context.Context, imgDir string, platform *ocispec.Platform
 	return nil, fmt.Errorf("target config not found")
 }
 
-func createSpec(r io.Reader, rootfs string, debug bool, debugInit bool, imageConfigPath, runtimeConfigPath, imageRootfsPath string, noVmtouch bool, noBinfmt bool, activityVMHTTPProxy bool, activityVMNetAdmin bool) error {
+func createSpec(r io.Reader, rootfs string, debug bool, debugInit bool, imageConfigPath, runtimeConfigPath, imageRootfsPath string, noVmtouch bool, noBinfmt bool, activityVMHTTPProxy bool, activityVMNftables bool) error {
 	if rootfs == "" {
 		return fmt.Errorf("rootfs path must be specified")
 	}
@@ -285,7 +285,7 @@ func createSpec(r io.Reader, rootfs string, debug bool, debugInit bool, imageCon
 	if err := json.NewDecoder(r).Decode(&config); err != nil {
 		return err
 	}
-	s, err := generateSpec(config, rootfs, activityVMHTTPProxy, activityVMNetAdmin)
+	s, err := generateSpec(config, rootfs, activityVMHTTPProxy)
 	if err != nil {
 		return err
 	}
@@ -295,7 +295,7 @@ func createSpec(r io.Reader, rootfs string, debug bool, debugInit bool, imageCon
 			binfmtArch = arch
 		}
 	}
-	bootConfig, err := generateBootConfig(debug, debugInit, imageConfigPath, runtimeConfigPath, imageRootfsPath, noVmtouch, binfmtArch, false)
+	bootConfig, err := generateBootConfig(debug, debugInit, imageConfigPath, runtimeConfigPath, imageRootfsPath, noVmtouch, binfmtArch, false, activityVMNftables)
 	if err != nil {
 		return err
 	}
@@ -316,7 +316,7 @@ func createSpec(r io.Reader, rootfs string, debug bool, debugInit bool, imageCon
 	return nil
 }
 
-func generateSpec(config ocispec.Image, rootfs string, activityVMHTTPProxy bool, activityVMNetAdmin bool) (_ *specs.Spec, err error) {
+func generateSpec(config ocispec.Image, rootfs string, activityVMHTTPProxy bool) (_ *specs.Spec, err error) {
 	ic := config.Config
 	if activityVMHTTPProxy {
 		ic.Env = append(ic.Env,
@@ -339,12 +339,6 @@ func generateSpec(config ocispec.Image, rootfs string, activityVMHTTPProxy bool,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate spec: %w", err)
-	}
-	if activityVMNetAdmin {
-		capabilities := s.Process.Capabilities
-		capabilities.Bounding = append(capabilities.Bounding, "CAP_NET_ADMIN")
-		capabilities.Effective = append(capabilities.Effective, "CAP_NET_ADMIN")
-		capabilities.Permitted = append(capabilities.Permitted, "CAP_NET_ADMIN")
 	}
 	if username := ic.User; username != "" {
 		passwdPath, err := user.GetPasswdPath()
@@ -395,7 +389,7 @@ func generateSpec(config ocispec.Image, rootfs string, activityVMHTTPProxy bool,
 	return s, nil
 }
 
-func generateBootConfig(debug, debugInit bool, imageConfigPath, runtimeConfigPath, imageRootfsPath string, noVmtouch bool, binfmtArch string, externalBundle bool) (*inittype.BootConfig, error) {
+func generateBootConfig(debug, debugInit bool, imageConfigPath, runtimeConfigPath, imageRootfsPath string, noVmtouch bool, binfmtArch string, externalBundle bool, activityVMNftables bool) (*inittype.BootConfig, error) {
 	runcArgs := []string{"run", "-b", runtimeBundlePath, "foo"}
 	if debug {
 		runcArgs = append([]string{"--debug"}, runcArgs...)
@@ -405,6 +399,9 @@ func generateBootConfig(debug, debugInit bool, imageConfigPath, runtimeConfigPat
 		cmdPreRun = [][]string{
 			{"vmtouch", "-tv", "/sbin/runc", "/sbin/init"},
 		}
+	}
+	if activityVMNftables {
+		cmdPreRun = append(cmdPreRun, []string{"/sbin/nft", "-f", "/etc/obelisk-activity-vm.nft"})
 	}
 	bootConfig := &inittype.BootConfig{
 		Debug:     debug,

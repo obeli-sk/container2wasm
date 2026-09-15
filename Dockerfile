@@ -101,7 +101,7 @@ ARG NO_VMTOUCH
 ARG NO_BINFMT
 ARG EXTERNAL_BUNDLE
 ARG ACTIVITY_VM_HTTP_PROXY=false
-ARG ACTIVITY_VM_NET_ADMIN=false
+ARG ACTIVITY_VM_NFTABLES=false
 COPY --link --from=assets / /work
 COPY --link --from=assets /activity-vm-assets/obelisk-activity-vm-http-proxy \
     /work/activity-vm-assets/obelisk-activity-vm-http-proxy
@@ -130,7 +130,7 @@ RUN mkdir -p /out/oci/rootfs /out/oci/bundle && \
                 --runtime-config-path=/oci/spec.json \
                 --rootfs-path=/oci/rootfs \
                 --activity-vm-http-proxy=${ACTIVITY_VM_HTTP_PROXY} \
-                --activity-vm-net-admin=${ACTIVITY_VM_NET_ADMIN} \
+                --activity-vm-nftables=${ACTIVITY_VM_NFTABLES} \
                 /oci "${TARGETPLATFORM}" /out/oci/rootfs
 RUN if test -f image.json; then mv image.json /out/oci/ ; fi && \
     if test -f spec.json; then mv spec.json /out/oci/ ; fi
@@ -592,6 +592,9 @@ RUN git clone https://github.com/hoytech/vmtouch.git && \
     CC="x86_64-linux-gnu-gcc -static" make && \
     mkdir /out && mv vmtouch /out/
 
+FROM alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc AS nftables-amd64-dev
+RUN apk add --no-cache nftables
+
 FROM ubuntu:22.04 AS rootfs-amd64-dev
 RUN apt-get update -y && apt-get install -y mkisofs
 COPY --link --from=busybox-amd64-dev /out/ /rootfs/
@@ -600,6 +603,10 @@ COPY --link --from=bundle-dev /out/ /rootfs/
 COPY --link --from=init-amd64-dev /out/init /rootfs/sbin/init
 COPY --link --from=vmtouch-amd64-dev /out/vmtouch /rootfs/bin/
 COPY --link --from=tini-amd64-dev /out/tini /rootfs/sbin/tini
+COPY --link --from=nftables-amd64-dev /lib/ /rootfs/lib/
+COPY --link --from=nftables-amd64-dev /usr/lib/ /rootfs/usr/lib/
+COPY --link --from=nftables-amd64-dev /sbin/nft /rootfs/sbin/nft
+COPY --link --from=assets ./config/bochs/activity-vm-nftables.conf /rootfs/etc/obelisk-activity-vm.nft
 RUN mkdir -p /rootfs/proc /rootfs/sys /rootfs/mnt /rootfs/run /rootfs/tmp /rootfs/dev /rootfs/var /rootfs/etc && mknod /rootfs/dev/null c 1 3 && chmod 666 /rootfs/dev/null
 RUN mkdir /out/ && mkisofs -R -o /out/rootfs.bin /rootfs/
 # RUN isoinfo -i /out/rootfs.bin -l
