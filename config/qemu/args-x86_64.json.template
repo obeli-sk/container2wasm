@@ -1,11 +1,15 @@
 [
     ${MIGRATION}
     "-nographic", "-m", "${MEMORY_SIZE}M", "-accel", "tcg,tb-size=500,thread=multi", "-smp", "${CORE_NUMS},sockets=${CORE_NUMS}",
+    "-cpu", "qemu64,+rdrand",
+    "-device", "virtio-rng-pci",
     "-L", "/image/",
     "-drive", "if=virtio,format=raw,file=/image/rootfs.bin",
     "-kernel", "/image/bzImage",
     "-nic", "none",
     "-append", "earlyprintk=ttyS0,115200n8 console=ttyS0,115200n8 slub_debug=F root=/dev/vda rootwait acpi=off ro virtio_net.napi_tx=false loglevel=${LOGLEVEL} QEMU_MODE=1 init=/sbin/tini -- /sbin/init",
-    "-virtfs", "local,path=${WASI0_PATH},mount_tag=wasi0,security_model=passthrough,id=wasi0",
-    "-virtfs", "local,path=${WASI1_PATH},mount_tag=wasi1,security_model=passthrough,id=wasi1"
+    "-fsdev", "local,path=${WASI0_PATH},security_model=passthrough,id=wasi0",
+    "-device", "virtio-9p-pci,fsdev=wasi0,mount_tag=wasi0,ioeventfd=off",
+    "-fsdev", "local,path=${WASI1_PATH},security_model=passthrough,id=wasi1",
+    "-device", "virtio-9p-pci,fsdev=wasi1,mount_tag=wasi1,ioeventfd=off"
 ]
