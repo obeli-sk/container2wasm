@@ -36,7 +36,7 @@ ARG BOCHS_REPO=https://github.com/ktock/Bochs
 ARG BOCHS_REPO_VERSION=a88d1f687ec83ff82b5318f59dcecb8dab44fc83
 
 ARG QEMU_REPO=https://github.com/obeli-sk/qemu-wasmtime
-ARG QEMU_REPO_VERSION=22226e29b1707a59947b75dbfe9c729b9e266970
+ARG QEMU_REPO_VERSION=70aa4263ef
 ARG QEMU_WASMTIME_JIT=false
 
 ARG SOURCE_REPO=https://github.com/container2wasm/container2wasm
@@ -425,9 +425,10 @@ COPY --link --from=libffi-emscripten-dev /glib-emscripten/ /glib-emscripten/
 WORKDIR /glib
 ENV CFLAGS="-Wno-error=incompatible-function-pointer-types -Wincompatible-function-pointer-types -O2 -matomics -mbulk-memory -DNDEBUG -pthread -sWASM_BIGINT -sMALLOC=emmalloc -sASYNCIFY=1"
 ENV CXXFLAGS="$CFLAGS"
-# WasmFS pipes do not implement F_SETFL. GLib only needs the wakeup pipe to
-# break its event-loop wait, which the Wasmtime host bounds to one millisecond.
+# WasmFS pipes do not implement F_GETFL/F_SETFL. The Wasmtime host bounds event
+# loop waits, so both GLib and QEMU can safely use their wakeup pipes as-is.
 RUN sed -i '/if (!g_unix_set_fd_nonblocking/,/g_error ("Set pipes non-blocking/d' glib/gwakeup.c
+RUN sed -i '/g_unix_set_fd_nonblocking (gint/,/^}/ { s/#ifdef F_GETFL/#if defined(__EMSCRIPTEN__)\\\n  return TRUE;\\\n#elif defined(F_GETFL)/; }' glib/glib-unix.c
 RUN <<EOF
 cat <<'EOT' > /emcc-meson-wrap.sh
 #!/bin/bash
@@ -873,12 +874,11 @@ ARG LOAD_MODE
 ARG QEMU_WASMTIME_JIT
 # NODERAWFS is a Wasm-side lazy host-filesystem backend. Obelisk implements
 # its `_wasmfs_node_*` import ABI directly, without Node or JavaScript.
-RUN JIT_CONFIGURE_FLAG= && JIT_LINK_FLAG= && \
+RUN JIT_LINK_FLAG= && \
     PTY_FLAGS="$XTERM_PTY_CFLAGS" && \
     RUNTIME_METHOD_FLAGS="-sEXPORTED_RUNTIME_METHODS=addFunction,removeFunction,TTY,FS" && \
     RUNTIME_FLAGS="-pthread -sPROXY_TO_PTHREAD=1 -sFORCE_FILESYSTEM -sEXPORT_ES6=1" && \
     if test "${QEMU_WASMTIME_JIT}" = "true"; then \
-      JIT_CONFIGURE_FLAG=--enable-wasmtime-jit-bridge; \
       JIT_LINK_FLAG="-sERROR_ON_UNDEFINED_SYMBOLS=0 -Wl,--export-memory"; \
       PTY_FLAGS=; \
       RUNTIME_METHOD_FLAGS=; \
@@ -886,7 +886,6 @@ RUN JIT_CONFIGURE_FLAG= && JIT_LINK_FLAG= && \
     fi && \
     EXTRA_CFLAGS="-O3 -g -Wno-error=unused-command-line-argument -Wno-error=unused-but-set-variable -matomics -mbulk-memory -DNDEBUG -DG_DISABLE_ASSERT -D_GNU_SOURCE -sASYNCIFY=1 $RUNTIME_FLAGS -sALLOW_TABLE_GROWTH -sTOTAL_MEMORY=$((3000*1024*1024)) -sWASM_BIGINT -sMALLOC=emmalloc -sASYNCIFY_IMPORTS=ffi_call_js $PTY_FLAGS " && \
     emconfigure ../configure --static --target-list=x86_64-softmmu --cpu=wasm32 --cross-prefix= \
-    ${JIT_CONFIGURE_FLAG} \
     --without-default-features --enable-system --with-coroutine=fiber --enable-virtfs \
     --extra-cflags="$EXTRA_CFLAGS" --extra-cxxflags="$EXTRA_CFLAGS" \
     --extra-ldflags="$JIT_LINK_FLAG $RUNTIME_METHOD_FLAGS" && \
