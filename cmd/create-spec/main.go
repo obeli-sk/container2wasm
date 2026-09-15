@@ -401,7 +401,7 @@ func generateBootConfig(debug, debugInit bool, imageConfigPath, runtimeConfigPat
 		}
 	}
 	if activityVMNftables {
-		cmdPreRun = append(cmdPreRun, []string{"/sbin/nft", "-f", "/etc/obelisk-activity-vm.nft"})
+		cmdPreRun = append(cmdPreRun, []string{"/usr/sbin/nft", "-f", "/etc/obelisk-activity-vm.nft"})
 	}
 	bootConfig := &inittype.BootConfig{
 		Debug:     debug,

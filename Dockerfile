@@ -605,7 +605,7 @@ COPY --link --from=vmtouch-amd64-dev /out/vmtouch /rootfs/bin/
 COPY --link --from=tini-amd64-dev /out/tini /rootfs/sbin/tini
 COPY --link --from=nftables-amd64-dev /lib/ /rootfs/lib/
 COPY --link --from=nftables-amd64-dev /usr/lib/ /rootfs/usr/lib/
-COPY --link --from=nftables-amd64-dev /sbin/nft /rootfs/sbin/nft
+COPY --link --from=nftables-amd64-dev /usr/sbin/nft /rootfs/usr/sbin/nft
 COPY --link --from=assets ./config/bochs/activity-vm-nftables.conf /rootfs/etc/obelisk-activity-vm.nft
 RUN mkdir -p /rootfs/proc /rootfs/sys /rootfs/mnt /rootfs/run /rootfs/tmp /rootfs/dev /rootfs/var /rootfs/etc && mknod /rootfs/dev/null c 1 3 && chmod 666 /rootfs/dev/null
 RUN mkdir /out/ && mkisofs -R -o /out/rootfs.bin /rootfs/
