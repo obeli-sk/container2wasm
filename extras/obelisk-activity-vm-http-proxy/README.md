@@ -25,3 +25,6 @@ curl http://obelisk-host:5005/v1/executions
 
 Guest `localhost` remains guest-local. The alias rewrite applies only to the
 exact `obelisk-host` authority, optionally followed by a port.
+
+The appliance also listens for plain HTTP on `obelisk-host:5005`, Obelisk's
+default API port. This permits the direct curl form above without `--connect-to`.
