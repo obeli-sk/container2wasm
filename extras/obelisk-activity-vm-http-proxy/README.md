@@ -9,3 +9,19 @@ The activity VM appliance installs the proxy at
 guest-local DNS responder which resolves names to the proxy's HTTP and HTTPS
 loopback listeners. This transparently covers static and dynamic executables
 without relying on an ABI-specific `LD_PRELOAD` shim.
+
+`obelisk-host` is reserved as the guest spelling of the Obelisk host. The proxy
+rewrites it to `localhost` before forwarding the request through the bridge, so
+existing HTTP policy remains portable across VM, exec, WASM, and JS activities:
+
+```toml
+[[activity_vm.allowed_host]]
+pattern = "http://localhost:5005"
+```
+
+```sh
+curl http://obelisk-host:5005/v1/executions
+```
+
+Guest `localhost` remains guest-local. The alias rewrite applies only to the
+exact `obelisk-host` authority, optionally followed by a port.
