@@ -128,8 +128,13 @@ jobs:
         run: |
           echo "$DOCKER_HUB_TOKEN" | oras login docker.io -u "$DOCKER_HUB_USERNAME" --password-stdin
           cd "$OUTPUT_DIR"
+          wasm_digest=$(cut -d ' ' -f 1 SHA256SUMS)
+          created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          printf '%s\n' \
+            "{\"created\":\"$created\",\"author\":null,\"architecture\":\"wasm\",\"os\":\"wasip1\",\"layerDigests\":[\"sha256:$wasm_digest\"],\"component\":null}" \
+            > wasm-config.json
           oras push "${IMAGE_BASE}:${TAG}" \
-            --artifact-type application/wasm \
-            "activity-vm-runtime.wasm:application/wasm" \
-            "SHA256SUMS:text/plain"
+            --config wasm-config.json:application/vnd.wasm.config.v0+json \
+            --annotation dev.obelisk.artifact.kind=activity-vm-runtime.v1 \
+            "activity-vm-runtime.wasm:application/wasm"
           oras manifest fetch --descriptor "${IMAGE_BASE}:${TAG}"
