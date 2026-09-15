@@ -881,7 +881,7 @@ RUN JIT_CONFIGURE_FLAG= && JIT_LINK_FLAG= && \
       JIT_LINK_FLAG="-sERROR_ON_UNDEFINED_SYMBOLS=0 -Wl,--export-memory"; \
       PTY_FLAGS=; \
       RUNTIME_METHOD_FLAGS=; \
-      RUNTIME_FLAGS="-sSTANDALONE_WASM=1 -sWASMFS=1 -sNODERAWFS=1"; \
+      RUNTIME_FLAGS="-pthread -sSTANDALONE_WASM=1 -sWASMFS=1 -sNODERAWFS=1"; \
     fi && \
     EXTRA_CFLAGS="-O3 -g -Wno-error=unused-command-line-argument -Wno-error=unused-but-set-variable -matomics -mbulk-memory -DNDEBUG -DG_DISABLE_ASSERT -D_GNU_SOURCE -sASYNCIFY=1 $RUNTIME_FLAGS -sALLOW_TABLE_GROWTH -sTOTAL_MEMORY=$((3000*1024*1024)) -sWASM_BIGINT -sMALLOC=emmalloc -sASYNCIFY_IMPORTS=ffi_call_js $PTY_FLAGS " && \
     emconfigure ../configure --static --target-list=x86_64-softmmu --cpu=wasm32 --cross-prefix= \
