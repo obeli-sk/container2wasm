@@ -33,14 +33,15 @@ const (
 
 func main() {
 	var (
-		debug             = flag.Bool("debug", false, "enable debug print on boot")
-		debugInit         = flag.Bool("debug-init", false, "enable debug print during init")
-		imageConfigPath   = flag.String("image-config-path", "/oci/image.json", "path to image config used by init during runtime")
-		runtimeConfigPath = flag.String("runtime-config-path", "/oci/spec.json", "path to runtime spec config used by init during runtime")
-		imageRootfsPath   = flag.String("rootfs-path", "/oci/rootfs", "path to rootfs used as overlayfs lowerdir of container rootfs")
-		noVmtouch         = flag.Bool("no-vmtouch", false, "do not perform vmtouch")
-		externalBundle    = flag.Bool("external-bundle", false, "provide bundle externally during runtime")
-		noBinfmt          = flag.Bool("no-binfmt", false, "do not install binfmt")
+		debug               = flag.Bool("debug", false, "enable debug print on boot")
+		debugInit           = flag.Bool("debug-init", false, "enable debug print during init")
+		imageConfigPath     = flag.String("image-config-path", "/oci/image.json", "path to image config used by init during runtime")
+		runtimeConfigPath   = flag.String("runtime-config-path", "/oci/spec.json", "path to runtime spec config used by init during runtime")
+		imageRootfsPath     = flag.String("rootfs-path", "/oci/rootfs", "path to rootfs used as overlayfs lowerdir of container rootfs")
+		noVmtouch           = flag.Bool("no-vmtouch", false, "do not perform vmtouch")
+		externalBundle      = flag.Bool("external-bundle", false, "provide bundle externally during runtime")
+		noBinfmt            = flag.Bool("no-binfmt", false, "do not install binfmt")
+		activityVMHTTPProxy = flag.Bool("activity-vm-http-proxy", false, "route container HTTP through the activity VM guest proxy")
 	)
 	flag.Parse()
 	args := flag.Args()
@@ -64,7 +65,7 @@ func main() {
 		if err := os.WriteFile("image.json", cfgD, 0600); err != nil {
 			panic(err)
 		}
-		if err := createSpec(bytes.NewReader(cfgD), rootfs, *debug, *debugInit, *imageConfigPath, *runtimeConfigPath, *imageRootfsPath, *noVmtouch, *noBinfmt); err != nil {
+		if err := createSpec(bytes.NewReader(cfgD), rootfs, *debug, *debugInit, *imageConfigPath, *runtimeConfigPath, *imageRootfsPath, *noVmtouch, *noBinfmt, *activityVMHTTPProxy); err != nil {
 			panic(err)
 		}
 	} else {
@@ -275,7 +276,7 @@ func unpackDocker(ctx context.Context, imgDir string, platform *ocispec.Platform
 	return nil, fmt.Errorf("target config not found")
 }
 
-func createSpec(r io.Reader, rootfs string, debug bool, debugInit bool, imageConfigPath, runtimeConfigPath, imageRootfsPath string, noVmtouch bool, noBinfmt bool) error {
+func createSpec(r io.Reader, rootfs string, debug bool, debugInit bool, imageConfigPath, runtimeConfigPath, imageRootfsPath string, noVmtouch bool, noBinfmt bool, activityVMHTTPProxy bool) error {
 	if rootfs == "" {
 		return fmt.Errorf("rootfs path must be specified")
 	}
@@ -283,7 +284,7 @@ func createSpec(r io.Reader, rootfs string, debug bool, debugInit bool, imageCon
 	if err := json.NewDecoder(r).Decode(&config); err != nil {
 		return err
 	}
-	s, err := generateSpec(config, rootfs)
+	s, err := generateSpec(config, rootfs, activityVMHTTPProxy)
 	if err != nil {
 		return err
 	}
@@ -314,8 +315,14 @@ func createSpec(r io.Reader, rootfs string, debug bool, debugInit bool, imageCon
 	return nil
 }
 
-func generateSpec(config ocispec.Image, rootfs string) (_ *specs.Spec, err error) {
+func generateSpec(config ocispec.Image, rootfs string, activityVMHTTPProxy bool) (_ *specs.Spec, err error) {
 	ic := config.Config
+	if activityVMHTTPProxy {
+		ic.Env = append(ic.Env,
+			"http_proxy=http://127.0.0.1:80",
+			"HTTP_PROXY=http://127.0.0.1:80",
+		)
+	}
 	ctdCtx := ctdnamespaces.WithNamespace(context.TODO(), "default")
 	p := "linux/riscv64"
 	if config.Architecture == "amd64" {

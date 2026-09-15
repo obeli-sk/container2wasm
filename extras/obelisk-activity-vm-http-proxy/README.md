@@ -5,9 +5,29 @@ exchanges request and response files with the Obelisk host through a writable
 WASI directory exposed to Linux over virtio-9p.
 
 The activity VM appliance installs the proxy at
-`/usr/local/libexec/obelisk/obelisk-activity-vm-http-proxy`. Obelisk may replace
-it at runtime by preopening an executable named
-`obelisk-activity-vm-http-proxy.override` in `/obelisk-activity-vm-tools`.
+`/usr/local/libexec/obelisk/obelisk-activity-vm-http-proxy`. It also provides a
+guest-local DNS responder which resolves names to the proxy's HTTP and HTTPS
+loopback listeners. This transparently covers static and dynamic executables
+without relying on an ABI-specific `LD_PRELOAD` shim.
 
-The socket interception shim remains a runtime-provided artifact because it
-must be ABI-compatible with the Nix executable being launched.
+`obelisk-host` is reserved as the guest spelling of the Obelisk host. The proxy
+rewrites it to `localhost` before forwarding the request through the bridge, so
+existing HTTP policy remains portable across VM, exec, WASM, and JS activities:
+
+```toml
+[[activity_vm.allowed_host]]
+pattern = "http://localhost:5005"
+```
+
+```sh
+curl http://obelisk-host:5005/v1/executions
+```
+
+Guest `localhost` remains guest-local. The alias rewrite applies only to the
+exact `obelisk-host` authority, optionally followed by a port.
+
+The activity VM appliance sets `http_proxy=http://127.0.0.1:80`. HTTP clients
+which honor the standard variable therefore send requests for every destination
+port through the bridge, allowing `curl http://obelisk-host:5005/...` without
+connection-specific arguments. DNS interception continues to cover clients
+which ignore proxy variables when they use the standard HTTP and HTTPS ports.
