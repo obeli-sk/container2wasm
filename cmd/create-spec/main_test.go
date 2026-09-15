@@ -11,7 +11,7 @@ func TestGenerateBootConfigInitializesActivityVMNftables(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := [][]string{{"/usr/sbin/nft", "-f", "/etc/obelisk-activity-vm.nft"}}
+	want := [][]string{{"/usr/sbin/nft", "-f", "/oci/obelisk-activity-vm.nft"}}
 	if !reflect.DeepEqual(config.CmdPreRun, want) {
 		t.Fatalf("unexpected pre-snapshot commands: got %v, want %v", config.CmdPreRun, want)
 	}

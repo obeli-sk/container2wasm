@@ -135,6 +135,9 @@ RUN mkdir -p /out/oci/rootfs /out/oci/bundle && \
 RUN if test -f image.json; then mv image.json /out/oci/ ; fi && \
     if test -f spec.json; then mv spec.json /out/oci/ ; fi
 RUN mv initconfig.json /out/oci/
+RUN install -D -m 644 \
+    /work/config/bochs/activity-vm-nftables.conf \
+    /out/oci/obelisk-activity-vm.nft
 RUN install -D -m 755 \
     /work/activity-vm-assets/obelisk-activity-vm-http-proxy \
     /out/oci/rootfs/usr/local/libexec/obelisk/obelisk-activity-vm-http-proxy
@@ -606,7 +609,6 @@ COPY --link --from=tini-amd64-dev /out/tini /rootfs/sbin/tini
 COPY --link --from=nftables-amd64-dev /lib/ /rootfs/lib/
 COPY --link --from=nftables-amd64-dev /usr/lib/ /rootfs/usr/lib/
 COPY --link --from=nftables-amd64-dev /usr/sbin/nft /rootfs/usr/sbin/nft
-COPY --link --from=assets ./config/bochs/activity-vm-nftables.conf /rootfs/etc/obelisk-activity-vm.nft
 RUN mkdir -p /rootfs/proc /rootfs/sys /rootfs/mnt /rootfs/run /rootfs/tmp /rootfs/dev /rootfs/var /rootfs/etc && mknod /rootfs/dev/null c 1 3 && chmod 666 /rootfs/dev/null
 RUN mkdir /out/ && mkisofs -R -o /out/rootfs.bin /rootfs/
 # RUN isoinfo -i /out/rootfs.bin -l
