@@ -28,6 +28,8 @@ use std::{
 
 const MAX_HEADER: usize = 64 * 1024;
 const MAX_BODY: usize = 1024 * 1024;
+const HOST_ALIAS: &str = "obelisk-host";
+const HOST_TARGET: &str = "localhost";
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Serialize)]
@@ -172,7 +174,7 @@ fn dns_response(request: &[u8]) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use super::dns_response;
+    use super::{canonicalize_absolute_url, canonicalize_authority, dns_response};
 
     #[test]
     fn dns_a_query_resolves_to_loopback() {
@@ -196,6 +198,36 @@ mod tests {
         let response = dns_response(&query);
         assert_eq!(&response[6..8], &[0x00, 0x00]);
         assert_eq!(response.len(), query.len());
+    }
+
+    #[test]
+    fn host_alias_preserves_the_port() {
+        assert_eq!(canonicalize_authority("obelisk-host"), "localhost");
+        assert_eq!(
+            canonicalize_authority("obelisk-host:5005"),
+            "localhost:5005"
+        );
+        assert_eq!(
+            canonicalize_authority("OBELISK-HOST:5005"),
+            "localhost:5005"
+        );
+        assert_eq!(canonicalize_authority("example.com:80"), "example.com:80");
+        assert_eq!(
+            canonicalize_authority("obelisk-host.example:80"),
+            "obelisk-host.example:80"
+        );
+    }
+
+    #[test]
+    fn host_alias_is_rewritten_in_absolute_urls() {
+        assert_eq!(
+            canonicalize_absolute_url("http://obelisk-host:5005/v1?q=1"),
+            "http://localhost:5005/v1?q=1"
+        );
+        assert_eq!(
+            canonicalize_absolute_url("https://example.com/obelisk-host"),
+            "https://example.com/obelisk-host"
+        );
     }
 }
 
@@ -234,10 +266,15 @@ struct DynamicCertificateResolver {
 impl ResolvesServerCert for DynamicCertificateResolver {
     fn resolve(&self, hello: ClientHello<'_>) -> Option<Arc<CertifiedKey>> {
         let name = hello.server_name()?;
+        let policy_name = if name == HOST_ALIAS {
+            HOST_TARGET
+        } else {
+            name
+        };
         if !self
             .allowed
             .iter()
-            .any(|allowed| allowed == "*" || allowed == name)
+            .any(|allowed| allowed == "*" || allowed == policy_name)
         {
             return None;
         }
@@ -295,8 +332,9 @@ fn serve(mut stream: impl Read + Write, queue: &Path, default_scheme: &str) -> R
     let mut content_length = 0usize;
     for line in lines.filter(|line| !line.is_empty()) {
         let (name, value) = line.split_once(':').context("malformed request header")?;
-        let value = value.trim().to_owned();
+        let mut value = value.trim().to_owned();
         if name.eq_ignore_ascii_case("host") {
+            value = canonicalize_authority(&value);
             host = Some(value.clone());
         }
         if name.eq_ignore_ascii_case("content-length") {
@@ -319,7 +357,7 @@ fn serve(mut stream: impl Read + Write, queue: &Path, default_scheme: &str) -> R
     // Host authority. The host-side policy still validates the reconstructed URL,
     // so this would be defense in depth rather than a policy boundary.
     let url = if target.starts_with("http://") || target.starts_with("https://") {
-        target
+        canonicalize_absolute_url(&target)
     } else {
         format!(
             "{default_scheme}://{}{}",
@@ -389,6 +427,41 @@ fn serve(mut stream: impl Read + Write, queue: &Path, default_scheme: &str) -> R
     )?;
     stream_response_body(&mut stream, queue, &body_prefix)?;
     Ok(())
+}
+
+fn canonicalize_authority(authority: &str) -> String {
+    if authority.eq_ignore_ascii_case(HOST_ALIAS) {
+        return HOST_TARGET.to_owned();
+    }
+    if let Some((name, port)) = authority.rsplit_once(':')
+        && name.eq_ignore_ascii_case(HOST_ALIAS)
+        && !port.is_empty()
+        && port.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return format!("{HOST_TARGET}:{port}");
+    }
+    authority.to_owned()
+}
+
+fn canonicalize_absolute_url(url: &str) -> String {
+    let Some(scheme_end) = url.find("://") else {
+        return url.to_owned();
+    };
+    let authority_start = scheme_end + 3;
+    let authority_end = url[authority_start..]
+        .find(['/', '?', '#'])
+        .map_or(url.len(), |offset| authority_start + offset);
+    let authority = &url[authority_start..authority_end];
+    let canonical = canonicalize_authority(authority);
+    if canonical == authority {
+        return url.to_owned();
+    }
+    format!(
+        "{}{}{}",
+        &url[..authority_start],
+        canonical,
+        &url[authority_end..]
+    )
 }
 
 fn stream_response_body(destination: &mut impl Write, queue: &Path, prefix: &str) -> Result<()> {
