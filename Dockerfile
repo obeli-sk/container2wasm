@@ -425,6 +425,9 @@ COPY --link --from=libffi-emscripten-dev /glib-emscripten/ /glib-emscripten/
 WORKDIR /glib
 ENV CFLAGS="-Wno-error=incompatible-function-pointer-types -Wincompatible-function-pointer-types -O2 -matomics -mbulk-memory -DNDEBUG -pthread -sWASM_BIGINT -sMALLOC=emmalloc -sASYNCIFY=1"
 ENV CXXFLAGS="$CFLAGS"
+# WasmFS pipes do not implement F_SETFL. GLib only needs the wakeup pipe to
+# break its event-loop wait, which the Wasmtime host bounds to one millisecond.
+RUN sed -i '/if (!g_unix_set_fd_nonblocking/,/g_error ("Set pipes non-blocking/d' glib/gwakeup.c
 RUN <<EOF
 cat <<'EOT' > /emcc-meson-wrap.sh
 #!/bin/bash
