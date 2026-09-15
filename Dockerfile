@@ -882,7 +882,7 @@ RUN JIT_LINK_FLAG= && TCG_CONFIGURE_FLAG= && \
     RUNTIME_METHOD_FLAGS="-sEXPORTED_RUNTIME_METHODS=addFunction,removeFunction,TTY,FS" && \
     RUNTIME_FLAGS="-pthread -sPROXY_TO_PTHREAD=1 -sFORCE_FILESYSTEM -sEXPORT_ES6=1" && \
     if test "${QEMU_WASMTIME_JIT}" = "true"; then \
-      JIT_LINK_FLAG="-sERROR_ON_UNDEFINED_SYMBOLS=0 -Wl,--export-memory -Wl,--export=__syscall_poll"; \
+      JIT_LINK_FLAG="-sERROR_ON_UNDEFINED_SYMBOLS=0 -Wl,--export-memory -Wl,--export=__syscall_poll -Wl,--export=init_wasm32"; \
       PTY_FLAGS=; \
       RUNTIME_METHOD_FLAGS=; \
       RUNTIME_FLAGS="-pthread -sSTANDALONE_WASM=1 -sWASMFS=1 -sNODERAWFS=1"; \
