@@ -105,6 +105,7 @@ jobs:
             --assets="$GITHUB_WORKSPACE" \
             --build-arg=CONTAINER_CAP_SYS_ADMIN=true \
             --build-arg=ACTIVITY_VM_HTTP_PROXY=true \
+            --build-arg=ACTIVITY_VM_NET_ADMIN=true \
             --build-arg="OPTIMIZATION_MODE=$OPTIMIZATION_MODE" \
             "$SOURCE_IMAGE" \
             "$OUTPUT_DIR/activity-vm-runtime.wasm"
