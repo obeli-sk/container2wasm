@@ -818,6 +818,7 @@ RUN cp /qemu/pc-bios/bios-256k.bin /pack/
 RUN cp /qemu/pc-bios/kvmvapic.bin /pack/
 RUN cp /qemu/pc-bios/linuxboot_dma.bin /pack/
 RUN cp /qemu/pc-bios/vgabios-stdvga.bin /pack/
+RUN cp /qemu/pc-bios/efi-e1000.rom /pack/
 RUN cp /qemu/pc-bios/efi-virtio.rom /pack/
 RUN ln -s /pack /image
 
