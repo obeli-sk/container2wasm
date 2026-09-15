@@ -4,8 +4,7 @@
     "-L", "/image/",
     "-drive", "if=virtio,format=raw,file=/image/rootfs.bin",
     "-kernel", "/image/bzImage",
-    "-netdev", "user,id=net0",
-    "-device", "e1000,netdev=net0",
+    "-nic", "none",
     "-append", "earlyprintk=ttyS0,115200n8 console=ttyS0,115200n8 slub_debug=F root=/dev/vda rootwait acpi=off ro virtio_net.napi_tx=false loglevel=${LOGLEVEL} QEMU_MODE=1 init=/sbin/tini -- /sbin/init",
     "-virtfs", "local,path=${WASI0_PATH},mount_tag=wasi0,security_model=passthrough,id=wasi0",
     "-virtfs", "local,path=${WASI1_PATH},mount_tag=wasi1,security_model=passthrough,id=wasi1"
