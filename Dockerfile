@@ -1053,7 +1053,8 @@ COPY --link --from=vm-amd64-dev /pack /minpack
 FROM bochs-dev-common AS bochs-dev-wizer
 COPY --link --from=vm-amd64-dev /pack /pack
 ENV WASMTIME_BACKTRACE_DETAILS=1
-RUN mv bochs bochs-org && /tools/wizer/wizer --allow-wasi --wasm-bulk-memory=true -r _start=wizer.resume --mapdir /pack::/pack -o bochs bochs-org
+RUN mv bochs bochs-org && timeout --kill-after=10s 120s \
+    /tools/wizer/wizer --allow-wasi --wasm-bulk-memory=true -r _start=wizer.resume --mapdir /pack::/pack -o bochs bochs-org
 RUN mkdir /minpack && cp /pack/rootfs.bin /minpack/ && cp /pack/boot.iso /minpack/
 
 FROM bochs-dev-${OPTIMIZATION_MODE} AS bochs-dev-packed
