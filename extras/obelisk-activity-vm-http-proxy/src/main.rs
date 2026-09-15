@@ -315,6 +315,9 @@ fn serve(mut stream: impl Read + Write, queue: &Path, default_scheme: &str) -> R
         }
         bytes.extend_from_slice(&chunk[..read]);
     }
+    // TODO: For HTTPS, pass the TLS SNI into this function and reject a mismatched
+    // Host authority. The host-side policy still validates the reconstructed URL,
+    // so this would be defense in depth rather than a policy boundary.
     let url = if target.starts_with("http://") || target.starts_with("https://") {
         target
     } else {
