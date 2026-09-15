@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feat/activity-vm-qemu-jit
+      - feat/qemu-emscripten-host-runtime
   workflow_dispatch:
     inputs:
       ref:
