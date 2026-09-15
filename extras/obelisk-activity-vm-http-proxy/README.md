@@ -25,3 +25,9 @@ curl http://obelisk-host:5005/v1/executions
 
 Guest `localhost` remains guest-local. The alias rewrite applies only to the
 exact `obelisk-host` authority, optionally followed by a port.
+
+The activity VM appliance sets `http_proxy=http://127.0.0.1:80`. HTTP clients
+which honor the standard variable therefore send requests for every destination
+port through the bridge, allowing `curl http://obelisk-host:5005/...` without
+connection-specific arguments. DNS interception continues to cover clients
+which ignore proxy variables when they use the standard HTTP and HTTPS ports.

@@ -98,6 +98,7 @@ ARG OPTIMIZATION_MODE
 ARG NO_VMTOUCH
 ARG NO_BINFMT
 ARG EXTERNAL_BUNDLE
+ARG ACTIVITY_VM_HTTP_PROXY=false
 COPY --link --from=assets / /work
 WORKDIR /work
 RUN --mount=type=cache,target=/root/.cache/go-build \
@@ -123,6 +124,7 @@ RUN mkdir -p /out/oci/rootfs /out/oci/bundle && \
                 --image-config-path=/oci/image.json \
                 --runtime-config-path=/oci/spec.json \
                 --rootfs-path=/oci/rootfs \
+                --activity-vm-http-proxy=${ACTIVITY_VM_HTTP_PROXY} \
                 /oci "${TARGETPLATFORM}" /out/oci/rootfs
 RUN if test -f image.json; then mv image.json /out/oci/ ; fi && \
     if test -f spec.json; then mv spec.json /out/oci/ ; fi
