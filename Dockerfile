@@ -811,7 +811,8 @@ COPY --link --from=qemu-repo / /qemu
 FROM qemu-native-dev AS qemu-x86_64-pack
 WORKDIR /qemu/build/
 RUN ../configure --static --target-list=x86_64-softmmu --cross-prefix= \
-    --without-default-features --enable-system --with-coroutine=ucontext --enable-virtfs --enable-attr
+    --without-default-features --enable-system --with-coroutine=ucontext --enable-virtfs --enable-attr \
+    --extra-cflags=-DQEMU_GENERIC_HOST_TICKS
 RUN make -j $(nproc) qemu-system-x86_64
 
 RUN mkdir -p /pack/
