@@ -154,6 +154,7 @@ func doInit() error {
 		if err := os.Mkdir(packFSDst, 0777); err != nil {
 			return err
 		}
+		fmt.Printf("activity-vm: runtime pack mountpoint ready\n")
 		// QEMU snapshot can be created here
 		//////////////////////////////////////////////////////////////////////
 		fmt.Printf("==========") // special string not printed
@@ -180,19 +181,22 @@ func doInit() error {
 			if err := os.Mkdir(dst, 0777); err != nil {
 				return err
 			}
+			fmt.Printf("activity-vm: %s mountpoint ready\n", tag)
 			log.Printf("mounting %q to %q\n", tag, dst)
 			if err := syscall.Mount(tag, dst, "9p", 0, "trans=virtio,version=9p2000.L"); err != nil {
-				log.Printf("failed mounting %q: %v\n", tag, err)
-				break
+				return fmt.Errorf("failed mounting %q: %w", tag, err)
 			}
+			fmt.Printf("activity-vm: %s mounted\n", tag)
 		}
 
 		infoD, err := os.ReadFile(filepath.Join("/mnt", packFSTag, "info"))
 		if err != nil {
 			return err
 		}
+		fmt.Printf("activity-vm: runtime info read\n")
 		log.Printf("INFO:\n%s\n", string(infoD))
 		info = parseInfo(infoD)
+		fmt.Printf("activity-vm: runtime info parsed\n")
 	}
 	if info.storeSquashFS != "" {
 		if cfg.Container.ImageRootfsPath == "" {
@@ -226,6 +230,7 @@ func doInit() error {
 	if o, err := exec.Command("ip", "link", "set", "dev", "lo", "up").CombinedOutput(); err != nil {
 		return fmt.Errorf("failed lo up: %v: %w", string(o), err)
 	}
+	fmt.Printf("activity-vm: loopback ready\n")
 
 	if externalBundle {
 		if info.bundle == "" {
@@ -288,6 +293,7 @@ func doInit() error {
 	}
 
 	s = patchSpec(s, info, imageConfig)
+	fmt.Printf("activity-vm: runtime spec patched\n")
 	log.Printf("Running: %+v\n", s.Process.Args)
 	sd, err := json.Marshal(s)
 	if err != nil {
@@ -306,6 +312,7 @@ func doInit() error {
 
 	var lastErr error
 	for _, cmd := range cfg.Cmd {
+		fmt.Printf("activity-vm: command starting: %s\n", strings.Join(cmd, " "))
 		log.Printf("executing: %+v\n", cmd)
 		c := exec.Command(cmd[0], cmd[1:]...)
 		c.Stdin = os.Stdin
@@ -316,6 +323,7 @@ func doInit() error {
 			lastErr = fmt.Errorf("failed to run %v: %w", cmd, err)
 			break
 		}
+		fmt.Printf("activity-vm: command completed: %s\n", strings.Join(cmd, " "))
 	}
 
 	if err := exec.Command("poweroff", "-f").Run(); err != nil {
