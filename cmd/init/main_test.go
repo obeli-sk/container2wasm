@@ -2,6 +2,20 @@ package main
 
 import "testing"
 
+func TestParseInfoPackMountUsesDedicated9PDevice(t *testing.T) {
+	info := parseInfo([]byte("p: obelisk-activity-vm-http\n"))
+	if got, want := len(info.mounts), 1; got != want {
+		t.Fatalf("mount count = %d, want %d", got, want)
+	}
+	mount := info.mounts[0]
+	if got, want := mount.Source, "/mnt/wasi1/obelisk-activity-vm-http"; got != want {
+		t.Errorf("source = %q, want %q", got, want)
+	}
+	if got, want := mount.Destination, "/obelisk-activity-vm-http"; got != want {
+		t.Errorf("destination = %q, want %q", got, want)
+	}
+}
+
 func TestParseInfoSquashFSStore(t *testing.T) {
 	info := parseInfo([]byte("s: obelisk-activity-vm-store/store.squashfs\n"))
 	if got, want := info.storeSquashFS, "obelisk-activity-vm-store/store.squashfs"; got != want {
