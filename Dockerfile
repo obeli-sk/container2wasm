@@ -101,7 +101,7 @@ ARG NO_VMTOUCH
 ARG NO_BINFMT
 ARG EXTERNAL_BUNDLE
 COPY --link --from=assets / /work
-COPY --link --from=oci-image-src /activity-vm-assets/obelisk-activity-vm-http-proxy \
+COPY --link --from=assets /activity-vm-assets/obelisk-activity-vm-http-proxy \
     /work/activity-vm-assets/obelisk-activity-vm-http-proxy
 WORKDIR /work
 RUN --mount=type=cache,target=/root/.cache/go-build \
@@ -431,7 +431,7 @@ ENV CXXFLAGS="$CFLAGS"
 # WasmFS pipes do not implement F_GETFL/F_SETFL. The Wasmtime host bounds event
 # loop waits, so both GLib and QEMU can safely use their wakeup pipes as-is.
 RUN sed -i '/if (!g_unix_set_fd_nonblocking/,/g_error ("Set pipes non-blocking/d' glib/gwakeup.c
-COPY --link --from=oci-image-src /patches/glib-wasmfs-nonblocking.patch /tmp/glib-wasmfs-nonblocking.patch
+COPY --link --from=assets /patches/glib-wasmfs-nonblocking.patch /tmp/glib-wasmfs-nonblocking.patch
 RUN patch -p1 < /tmp/glib-wasmfs-nonblocking.patch
 RUN <<EOF
 cat <<'EOT' > /emcc-meson-wrap.sh
@@ -726,7 +726,7 @@ COPY --link --from=pixman-emscripten-dev /glib-emscripten/ /glib-emscripten/
 RUN mkdir -p build
 WORKDIR /qemu/build
 RUN npm i xterm-pty@v0.10.1
-COPY --link --from=oci-image-src /patches/xterm-pty/ /tmp/xterm-pty-patches/
+COPY --link --from=assets /patches/xterm-pty/ /tmp/xterm-pty-patches/
 RUN for patch_file in /tmp/xterm-pty-patches/*.patch; do \
       patch -d /qemu/build/node_modules/xterm-pty -p1 < "$patch_file"; \
     done
