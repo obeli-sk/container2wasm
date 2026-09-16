@@ -431,7 +431,7 @@ ENV CXXFLAGS="$CFLAGS"
 # WasmFS pipes do not implement F_GETFL/F_SETFL. The Wasmtime host bounds event
 # loop waits, so both GLib and QEMU can safely use their wakeup pipes as-is.
 RUN sed -i '/if (!g_unix_set_fd_nonblocking/,/g_error ("Set pipes non-blocking/d' glib/gwakeup.c
-COPY patches/glib-wasmfs-nonblocking.patch /tmp/glib-wasmfs-nonblocking.patch
+COPY --link --from=oci-image-src /patches/glib-wasmfs-nonblocking.patch /tmp/glib-wasmfs-nonblocking.patch
 RUN patch -p1 < /tmp/glib-wasmfs-nonblocking.patch
 RUN <<EOF
 cat <<'EOT' > /emcc-meson-wrap.sh

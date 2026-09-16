@@ -194,6 +194,15 @@ func doInit() error {
 		log.Printf("INFO:\n%s\n", string(infoD))
 		info = parseInfo(infoD)
 	}
+	if info.storeSquashFS != "" {
+		if cfg.Container.ImageRootfsPath == "" {
+			return fmt.Errorf("SquashFS store requires a container rootfs path")
+		}
+		if err := mountStoreSquashFS(cfg.Container.ImageRootfsPath, info.storeSquashFS); err != nil {
+			return err
+		}
+		fmt.Printf("activity-vm: SquashFS Nix store mounted read-only\n")
+	}
 
 	if info.withNet {
 		if info.mac != "" {
@@ -413,9 +422,10 @@ type runtimeFlags struct {
 	entrypoint []string
 	args       []string
 
-	withNet bool
-	mac     string
-	bundle  string
+	withNet       bool
+	mac           string
+	bundle        string
+	storeSquashFS string
 }
 
 func parseInfo(infoD []byte) (info runtimeFlags) {
@@ -479,11 +489,41 @@ func parseInfo(infoD []byte) (info runtimeFlags) {
 			}
 		case "b":
 			info.bundle = o
+		case "s":
+			info.storeSquashFS = o
 		default:
 			log.Printf("unsupported prefix: %q", inst)
 		}
 	}
 	return
+}
+
+func mountStoreSquashFS(rootfs, relative string) error {
+	if relative == "" {
+		return nil
+	}
+	source, destination, err := storeSquashFSMount(rootfs, relative)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(destination, 0555); err != nil {
+		return fmt.Errorf("cannot create Nix store mountpoint %q: %w", destination, err)
+	}
+	output, err := exec.Command("mount", "-t", "squashfs", "-o", "loop,ro", source, destination).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("cannot mount SquashFS store %q read-only at %q: %s: %w", source, destination, output, err)
+	}
+	return nil
+}
+
+func storeSquashFSMount(rootfs, relative string) (string, string, error) {
+	clean := filepath.Clean(relative)
+	if filepath.IsAbs(relative) || clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
+		return "", "", fmt.Errorf("invalid SquashFS store path %q", relative)
+	}
+	source := filepath.Join("/mnt", rootFSTag, clean)
+	destination := filepath.Join(rootfs, "nix/store")
+	return source, destination, nil
 }
 
 func patchSpec(s runtimespec.Spec, info runtimeFlags, imageConfig imagespec.Image) runtimespec.Spec {
