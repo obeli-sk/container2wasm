@@ -13,7 +13,6 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 
 	inittype "github.com/container2wasm/container2wasm/cmd/init/types"
 	imagespec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -158,8 +157,22 @@ func doInit() error {
 		// QEMU snapshot can be created here
 		//////////////////////////////////////////////////////////////////////
 		fmt.Printf("==========") // special string not printed
+		var b [1]byte
+		var bPos int
 		for {
-			time.Sleep(time.Second) // expect a snapshot is taken
+			if _, err := os.Stdin.Read(b[:]); err != nil {
+				return err
+			}
+			if b[0] == '=' {
+				bPos++
+				continue
+			}
+			if b[0] == '\n' && bPos > 0 {
+				break
+			}
+			bPos = 0
+		}
+		for {
 			if err := syscall.Mount(packFSTag, packFSDst, "9p", 0, "trans=virtio,version=9p2000.L"); err != nil {
 				//return fmt.Errorf("failed mounting(pack) %q: %w", packFSTag, err)
 				continue

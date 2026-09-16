@@ -36,7 +36,7 @@ ARG BOCHS_REPO=https://github.com/ktock/Bochs
 ARG BOCHS_REPO_VERSION=a88d1f687ec83ff82b5318f59dcecb8dab44fc83
 
 ARG QEMU_REPO=https://github.com/obeli-sk/qemu-wasmtime
-ARG QEMU_REPO_VERSION=70aa4263efa65c00384f42273be307d38adfe706
+ARG QEMU_REPO_VERSION=e1a895f9d937948e068b545a57ad870526923108
 ARG QEMU_WASMTIME_JIT=false
 ARG QEMU_WASMTIME_DISABLE_JIT=false
 
@@ -101,6 +101,8 @@ ARG NO_VMTOUCH
 ARG NO_BINFMT
 ARG EXTERNAL_BUNDLE
 COPY --link --from=assets / /work
+COPY --link --from=oci-image-src /activity-vm-assets/obelisk-activity-vm-http-proxy \
+    /work/activity-vm-assets/obelisk-activity-vm-http-proxy
 WORKDIR /work
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
@@ -717,6 +719,10 @@ COPY --link --from=linux-amd64-config-dev-qemu /work-buildlinux/linux/.config /
 
 FROM glib-emscripten-base AS qemu-emscripten-dev
 COPY --link --from=qemu-repo / /qemu
+COPY --link --from=oci-image-src /patches/emscripten-wasmfs-stdin-poll.patch \
+    /tmp/emscripten-wasmfs-stdin-poll.patch
+RUN patch -d /emsdk/upstream/emscripten -p1 < /tmp/emscripten-wasmfs-stdin-poll.patch
+RUN rm -f /emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/libwasmfs*.a
 WORKDIR /qemu
 COPY --link --from=zlib-emscripten-dev /glib-emscripten/ /glib-emscripten/
 COPY --link --from=glib-emscripten-dev /glib-emscripten/ /glib-emscripten/
