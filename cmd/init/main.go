@@ -166,6 +166,7 @@ func doInit() error {
 		if _, err := io.ReadFull(serial, resume[:]); err != nil {
 			return fmt.Errorf("failed waiting for QEMU snapshot resume byte: %w", err)
 		}
+		fmt.Printf("activity-vm: resume token received\n")
 		for {
 			if err := syscall.Mount(packFSTag, packFSDst, "9p", 0, "trans=virtio,version=9p2000.L"); err != nil {
 				//return fmt.Errorf("failed mounting(pack) %q: %w", packFSTag, err)
