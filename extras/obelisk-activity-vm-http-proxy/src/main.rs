@@ -17,7 +17,6 @@ use std::{
     io::{Read, Write},
     net::{TcpListener, UdpSocket},
     path::{Path, PathBuf},
-    process,
     sync::{
         Arc, Mutex,
         atomic::{AtomicU64, Ordering},
@@ -30,10 +29,12 @@ const MAX_HEADER: usize = 64 * 1024;
 const MAX_BODY: usize = 1024 * 1024;
 const HOST_ALIAS: &str = "obelisk-host";
 const HOST_TARGET: &str = "localhost";
-static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+static MAILBOX: Mutex<()> = Mutex::new(());
+static NEXT_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Serialize)]
 struct BridgeRequest {
+    id: u64,
     method: String,
     url: String,
     headers: Vec<(String, String)>,
@@ -42,16 +43,10 @@ struct BridgeRequest {
 
 #[derive(Deserialize)]
 struct BridgeResponse {
+    id: u64,
     status: u16,
     headers: Vec<(String, String)>,
-    body_prefix: Option<String>,
-    error: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct BridgeDone {
     body_length: usize,
-    chunks: usize,
     error: Option<String>,
 }
 
@@ -365,34 +360,44 @@ fn serve(mut stream: impl Read + Write, queue: &Path, default_scheme: &str) -> R
             target
         )
     };
+    let id = NEXT_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
     let request = BridgeRequest {
+        id,
         method,
         url,
         headers,
         body: bytes[header_end..header_end + content_length].to_vec(),
     };
-    let id = format!(
-        "{}-{}",
-        process::id(),
-        NEXT_ID.fetch_add(1, Ordering::Relaxed)
-    );
-    let temporary = queue.join(format!("{id}.tmp"));
-    let request_path = queue.join(format!("{id}.request"));
-    let response_path = queue.join(format!("{id}.response"));
-    fs::write(&temporary, serde_json::to_vec(&request)?)?;
-    fs::rename(&temporary, &request_path)?;
+    // QEMU's WASI-backed 9p export can modify existing files but cannot create,
+    // rename, or remove them. Serialize guest requests through a fixed mailbox
+    // whose files the Wasmtime host preallocates before boot.
+    let _mailbox = MAILBOX.lock().expect("HTTP mailbox mutex poisoned");
+    let request_path = queue.join("http-request.json");
+    let request_ready = queue.join("http-request-ready");
+    let response_path = queue.join("http-response.json");
+    let response_body = queue.join("http-response-body");
+    let response_ready = queue.join("http-response-ready");
+    overwrite_existing(&response_ready, b"")?;
+    overwrite_existing(&request_path, &serde_json::to_vec(&request)?)?;
+    overwrite_existing(&request_ready, format!("{id}\n").as_bytes())?;
 
     let started = Instant::now();
-    while !response_path.exists() {
+    while read_ready_id(&response_ready) != Some(id) {
         if started.elapsed() > Duration::from_secs(60) {
-            let _ = fs::remove_file(&request_path);
+            let _ = overwrite_existing(&request_ready, b"");
             bail!("HTTP broker timed out")
         }
         thread::sleep(Duration::from_millis(10));
     }
     let response: BridgeResponse = serde_json::from_slice(&fs::read(&response_path)?)?;
-    fs::remove_file(&response_path)?;
+    if response.id != id {
+        bail!(
+            "HTTP broker returned response {} for request {id}",
+            response.id
+        )
+    }
     if let Some(error) = response.error {
+        overwrite_existing(&response_ready, b"")?;
         let body = format!("request denied or failed: {error}\n");
         write!(
             stream,
@@ -402,14 +407,14 @@ fn serve(mut stream: impl Read + Write, queue: &Path, default_scheme: &str) -> R
         )?;
         return Ok(());
     }
-    let body_prefix = response
-        .body_prefix
-        .context("response has no body prefix")?;
-    if !body_prefix
-        .bytes()
-        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-    {
-        bail!("invalid response body prefix")
+    let body = fs::read(&response_body)?;
+    overwrite_existing(&response_ready, b"")?;
+    if body.len() != response.body_length {
+        bail!(
+            "response body mismatch: expected {} bytes, got {}",
+            response.body_length,
+            body.len()
+        )
     }
     write!(
         stream,
@@ -423,10 +428,27 @@ fn serve(mut stream: impl Read + Write, queue: &Path, default_scheme: &str) -> R
     }
     write!(
         stream,
-        "Transfer-Encoding: chunked\r\nConnection: close\r\n\r\n"
+        "Content-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
     )?;
-    stream_response_body(&mut stream, queue, &body_prefix)?;
+    stream.write_all(&body)?;
     Ok(())
+}
+
+fn overwrite_existing(path: &Path, bytes: &[u8]) -> Result<()> {
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(path)?;
+    file.write_all(bytes)?;
+    file.flush()?;
+    Ok(())
+}
+
+fn read_ready_id(path: &Path) -> Option<u64> {
+    let bytes = fs::read(path).ok()?;
+    let value = std::str::from_utf8(&bytes).ok()?;
+    value.strip_suffix('\n')?.parse().ok()
 }
 
 fn canonicalize_authority(authority: &str) -> String {
@@ -462,63 +484,6 @@ fn canonicalize_absolute_url(url: &str) -> String {
         canonical,
         &url[authority_end..]
     )
-}
-
-fn stream_response_body(destination: &mut impl Write, queue: &Path, prefix: &str) -> Result<()> {
-    let mut last_progress = Instant::now();
-    let done_path = queue.join(format!("{prefix}.done"));
-    let mut index = 0usize;
-    let mut copied = 0usize;
-    loop {
-        let body_path = queue.join(format!("{prefix}.body-{index:08}"));
-        if body_path.exists() {
-            let mut body = fs::File::open(&body_path)?;
-            let length = body.metadata()?.len();
-            write!(destination, "{length:x}\r\n")?;
-            let chunk_length = copy_body(&mut body, destination)?;
-            destination.write_all(b"\r\n")?;
-            fs::remove_file(body_path)?;
-            copied = copied
-                .checked_add(usize::try_from(chunk_length)?)
-                .context("response size overflow")?;
-            index += 1;
-            last_progress = Instant::now();
-            continue;
-        }
-        if done_path.exists() {
-            let done: BridgeDone = serde_json::from_slice(&fs::read(&done_path)?)?;
-            fs::remove_file(done_path)?;
-            if let Some(error) = done.error {
-                bail!("origin response stream failed: {error}")
-            }
-            if done.chunks != index || done.body_length != copied {
-                bail!(
-                    "response stream mismatch: expected {} chunks/{} bytes, got {index}/{copied}",
-                    done.chunks,
-                    done.body_length
-                )
-            }
-            destination.write_all(b"0\r\n\r\n")?;
-            return Ok(());
-        }
-        if last_progress.elapsed() > Duration::from_secs(60) {
-            bail!("HTTP response body timed out")
-        }
-        thread::sleep(Duration::from_millis(2));
-    }
-}
-
-fn copy_body(source: &mut impl Read, destination: &mut impl Write) -> Result<u64> {
-    let mut buffer = vec![0_u8; 256 * 1024];
-    let mut copied = 0_u64;
-    loop {
-        let read = source.read(&mut buffer)?;
-        if read == 0 {
-            return Ok(copied);
-        }
-        destination.write_all(&buffer[..read])?;
-        copied += read as u64;
-    }
 }
 
 fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
