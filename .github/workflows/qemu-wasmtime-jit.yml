@@ -20,7 +20,7 @@ on:
       tag:
         description: Docker Hub tag
         required: true
-        default: qemu-jit-poc
+        default: qemu-jit-http-poc-fixed
         type: string
       push:
         description: Push the experiment to Docker Hub
@@ -82,15 +82,19 @@ jobs:
           SOURCE_IMAGE: ${{ inputs.source_image || 'alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc' }}
         run: |
           mkdir -p "$OUTPUT_DIR"
+          # The Trynix TCG JIT is independent of the legacy Emscripten ABI flag.
+          # Keep the browser-compatible ABI consumed by the Wasmtime host.
           ./out/c2w \
             --assets="$GITHUB_WORKSPACE" \
             --target-stage=qemu-wasmtime-jit-amd64 \
-            --build-arg=QEMU_WASMTIME_JIT=true \
+            --build-arg=QEMU_WASMTIME_JIT=false \
             --build-arg=ACTIVITY_VM_HTTP_PROXY=true \
             --build-arg=ACTIVITY_VM_NFTABLES=true \
             "$SOURCE_IMAGE" \
             "$OUTPUT_DIR/"
           cd "$OUTPUT_DIR"
+          echo '9b1e1e932fff8785e8906829786bd8dc506512c97266d40964a5c97023524428  qemu-system-x86_64.wasm' \
+            | sha256sum --check --strict
           find . -type f ! -name SHA256SUMS -printf '%P\0' \
             | sort -z \
             | xargs -0 sha256sum \
@@ -98,7 +102,7 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: qemu-wasmtime-jit-${{ inputs.tag || 'qemu-jit-poc' }}
+          name: qemu-wasmtime-jit-${{ inputs.tag || 'qemu-jit-http-poc-fixed' }}
           path: builds/
           if-no-files-found: error
           retention-days: 7
@@ -111,7 +115,7 @@ jobs:
         env:
           DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
           DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
-          TAG: ${{ inputs.tag || 'qemu-jit-poc' }}
+          TAG: ${{ inputs.tag || 'qemu-jit-http-poc-fixed' }}
         run: |
           echo "$DOCKER_HUB_TOKEN" | oras login docker.io -u "$DOCKER_HUB_USERNAME" --password-stdin
           cd "$OUTPUT_DIR"
