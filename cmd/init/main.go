@@ -10,10 +10,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 
 	inittype "github.com/container2wasm/container2wasm/cmd/init/types"
 	imagespec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -158,7 +158,16 @@ func doInit() error {
 		// QEMU snapshot can be created here
 		//////////////////////////////////////////////////////////////////////
 		fmt.Printf("==========") // special string not printed
-		time.Sleep(time.Second)
+		// Keep the vCPU in guest userspace long enough for get-qemu-state to
+		// start migration. A timer sleep is not safe here: a timer captured by
+		// native QEMU has not reliably fired after restoring into wasm32 QEMU.
+		// The deliberately stateful loop also keeps the compiler from removing
+		// the snapshot window.
+		var snapshotSpin uint64
+		for i := uint64(0); i < 10_000_000; i++ {
+			snapshotSpin = snapshotSpin*1_664_525 + i + 1_013_904_223
+		}
+		runtime.KeepAlive(snapshotSpin)
 		for {
 			if err := syscall.Mount(packFSTag, packFSDst, "9p", 0, "trans=virtio,version=9p2000.L"); err != nil {
 				//return fmt.Errorf("failed mounting(pack) %q: %w", packFSTag, err)
