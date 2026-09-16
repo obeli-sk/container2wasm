@@ -86,6 +86,8 @@ jobs:
             --assets="$GITHUB_WORKSPACE" \
             --target-stage=qemu-wasmtime-jit-amd64 \
             --build-arg=QEMU_WASMTIME_JIT=true \
+            --build-arg=ACTIVITY_VM_HTTP_PROXY=true \
+            --build-arg=ACTIVITY_VM_NFTABLES=true \
             "$SOURCE_IMAGE" \
             "$OUTPUT_DIR/"
           cd "$OUTPUT_DIR"
