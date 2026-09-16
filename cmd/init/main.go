@@ -157,16 +157,6 @@ func doInit() error {
 		// QEMU snapshot can be created here
 		//////////////////////////////////////////////////////////////////////
 		fmt.Printf("==========") // special string not printed
-		serial, err := os.Open("/dev/ttyS0")
-		if err != nil {
-			return fmt.Errorf("failed opening QEMU resume serial: %w", err)
-		}
-		defer serial.Close()
-		var resume [1]byte
-		if _, err := io.ReadFull(serial, resume[:]); err != nil {
-			return fmt.Errorf("failed waiting for QEMU snapshot resume byte: %w", err)
-		}
-		fmt.Printf("activity-vm: resume token received\n")
 		for {
 			if err := syscall.Mount(packFSTag, packFSDst, "9p", 0, "trans=virtio,version=9p2000.L"); err != nil {
 				//return fmt.Errorf("failed mounting(pack) %q: %w", packFSTag, err)
@@ -181,6 +171,7 @@ func doInit() error {
 				return fmt.Errorf("failed unmounting(pack) %q: %w", packFSTag, err)
 			}
 		}
+		fmt.Printf("activity-vm: runtime 9p pack detected\n")
 		///////////////////////////////////////////////////////////////////////
 
 		// WASI-related filesystems
