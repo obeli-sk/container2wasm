@@ -36,7 +36,7 @@ ARG BOCHS_REPO=https://github.com/ktock/Bochs
 ARG BOCHS_REPO_VERSION=a88d1f687ec83ff82b5318f59dcecb8dab44fc83
 
 ARG QEMU_REPO=https://github.com/obeli-sk/qemu-wasmtime
-ARG QEMU_REPO_VERSION=982064889ab15c8b4ff96431800d48db69f07a8f
+ARG QEMU_REPO_VERSION=e23c64c7872ad017032983dfa7f0b991395c3608
 ARG QEMU_WASMTIME_JIT=false
 ARG QEMU_WASMTIME_DISABLE_JIT=false
 
@@ -719,6 +719,10 @@ COPY --link --from=linux-amd64-config-dev-qemu /work-buildlinux/linux/.config /
 
 FROM glib-emscripten-base AS qemu-emscripten-dev
 COPY --link --from=qemu-repo / /qemu
+COPY --link --from=oci-image-src /patches/emscripten-wasmfs-stdin-poll.patch \
+    /tmp/emscripten-wasmfs-stdin-poll.patch
+RUN patch -d /emsdk/upstream/emscripten -p1 < /tmp/emscripten-wasmfs-stdin-poll.patch
+RUN rm -f /emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/libwasmfs*.a
 WORKDIR /qemu
 COPY --link --from=zlib-emscripten-dev /glib-emscripten/ /glib-emscripten/
 COPY --link --from=glib-emscripten-dev /glib-emscripten/ /glib-emscripten/
