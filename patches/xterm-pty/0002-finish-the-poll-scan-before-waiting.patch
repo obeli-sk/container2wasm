@@ -1,0 +1,101 @@
+--- a/emscripten-pty.js	2026-09-09 18:30:22.081540788 -0700
++++ b/emscripten-pty.js	2026-09-09 18:46:01.949146919 -0700
+@@ -208,29 +208,40 @@
+     fd_read__async: true,
+ #endif
+ 
+-    $PTY_wrapPoll__deps: ['$PTY_waitForReadable', '$PTY_handleSleep', '$PTY_maxPollSleep'],
++    // Whether to wait is decided here rather than by the TTY op below,
++    // because the scan the op runs in is proxied to the main thread
++    // under PROXY_TO_PTHREAD: a flag it set would land in that thread's
++    // copy of this module and never be seen from the caller's. What
++    // does cross is the return value, and PTY_realPollTimeout, which
++    // the caller recorded on its own thread on the way in.
++    $PTY_wrapPoll__deps: ['$PTY_waitForReadable', '$PTY_handleSleep', '$PTY_maxPollSleep', '$PTY_realPollTimeout'],
+     $PTY_wrapPoll: (impl) => PTY_handleSleep((wakeUp) => {
+-        let result = impl();
+-        // Did this call return our variant of EAGAIN?
+-        // If so, that means it called into the PTY and the buffer was empty.
+-        if (result === -{{{ 1000 + cDefs.EAGAIN }}}) {
+-            // Wait for the PTY to become readable and try again.
+-            PTY_waitForReadable(type => {
+-                switch (type) {
+-                    case 0: /* ready */
+-                        wakeUp(impl());
+-                        break;
+-                    case 1: /* interrupted */
+-                        wakeUp(-{{{ cDefs.EINTR }}});
+-                        break;
+-                    case 2: /* timeout */
+-                        wakeUp(0);
+-                        break;
+-                }
+-            }, PTY_maxPollSleep);
+-        } else {
++        const result = impl();
++        // Something in the set is ready, or the caller asked not to
++        // wait at all.
++        if (result !== 0 || PTY_realPollTimeout === 0) {
+             wakeUp(result);
++            return;
+         }
++        // Nothing is ready: wait for the terminal, then scan again.
++        // Always for PTY_maxPollSleep rather than for the caller's
++        // shorter deadline, which sounds more faithful and is not worth
++        // it: waking on each caller's own timeout tripled the scans a
++        // quiet machine runs, cost 4% to 10% on the memory-bound rows
++        // of emubench, and bought nothing measurable.
++        PTY_waitForReadable(type => {
++            switch (type) {
++                case 0: /* ready */
++                    wakeUp(impl());
++                    break;
++                case 1: /* interrupted */
++                    wakeUp(-{{{ cDefs.EINTR }}});
++                    break;
++                case 2: /* timeout */
++                    wakeUp(0);
++                    break;
++            }
++        }, PTY_maxPollSleep);
+     }),
+ 
+     __syscall__newselect__deps: ['$xterm_pty_old_newselect', '$PTY_wrapPoll', '$PTY_realPollTimeout'],
+@@ -256,7 +267,7 @@
+ 
+ // Override default TTY ops to use our PTY.
+ // Doing this at compile-time reduces amount of generated unused JS.
+-Lib.$TTY__deps.push('$PTY', '$PTY_askToWaitAgain', '$PTY_realPollTimeout', '$PTY_maxPollSleep');
++Lib.$TTY__deps.push('$PTY', '$PTY_askToWaitAgain', '$PTY_pollTimeout', '$PTY_maxPollSleep');
+ 
+ let outputTtyOps = {
+     put_char: () => {
+@@ -327,11 +338,23 @@
+     },
+ 
+     poll: (stream, timeout) => {
++        // Report what this terminal has and let the scan go on.
++        //
++        // Asking to wait by throwing leaves emscripten's scan of the
++        // caller's remaining descriptors unfinished, so a poll(2) whose
++        // set holds this terminal never reaches anything else while the
++        // terminal is quiet. QEMU starts an incoming migration from a
++        // watch on the stream's descriptor, which is how a page that
++        // was not typing left the machine sitting in inmigrate, its
++        // stream unread. The wrapper above waits when the whole scan
++        // comes back empty.
++        //
++        // PTY_pollTimeout is how long the wait this may cause is
++        // allowed to hold the main thread's side of it: that side runs
++        // here, and a timer it can cancel is what disposes the readable
++        // and signal handlers it registers.
+         if (!PTY.readable && timeout) {
+-            const wait = PTY_realPollTimeout < 0 || PTY_realPollTimeout > PTY_maxPollSleep
+-                ? PTY_maxPollSleep
+-                : PTY_realPollTimeout;
+-            PTY_askToWaitAgain(wait);
++            PTY_pollTimeout = PTY_maxPollSleep;
+         }
+         return (PTY.readable ? {{{ cDefs.POLLIN }}} : 0) | (PTY.writable ? {{{ cDefs.POLLOUT }}} : 0);
+     },
+

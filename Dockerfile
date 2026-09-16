@@ -6,7 +6,7 @@ ARG WASI_SDK_VERSION_FULL=${WASI_SDK_VERSION}.0
 ARG WASI_VFS_VERSION=v0.3.0
 ARG WIZER_VERSION=04e49c989542f2bf3a112d60fbf88a62cce2d0d0
 ARG EMSDK_VERSION=3.1.40 # TODO: support recent version
-ARG EMSDK_VERSION_QEMU=4.0.10
+ARG EMSDK_VERSION_QEMU=3.1.50
 ARG BINARYEN_VERSION=114
 ARG BUSYBOX_VERSION=1.36.1
 ARG RUNC_VERSION=v1.3.0
@@ -36,14 +36,14 @@ ARG BOCHS_REPO=https://github.com/ktock/Bochs
 ARG BOCHS_REPO_VERSION=a88d1f687ec83ff82b5318f59dcecb8dab44fc83
 
 ARG QEMU_REPO=https://github.com/obeli-sk/qemu-wasmtime
-ARG QEMU_REPO_VERSION=33462a8b4ea89fe7f9fd0ab6921753d071834c09
+ARG QEMU_REPO_VERSION=7698fbc71f99cc5d0d958a604e4b2373afa8ad3f
 ARG QEMU_WASMTIME_JIT=false
 ARG QEMU_WASMTIME_DISABLE_JIT=false
 
 ARG SOURCE_REPO=https://github.com/container2wasm/container2wasm
 ARG SOURCE_REPO_VERSION=v0.8.4
 
-ARG ZLIB_VERSION=1.3.2
+ARG ZLIB_VERSION=1.3.1
 ARG GLIB_MINOR_VERSION=2.75
 ARG GLIB_VERSION=${GLIB_MINOR_VERSION}.0
 ARG PIXMAN_VERSION=0.42.2
@@ -358,7 +358,7 @@ FROM wasi-tinyemu AS wasi-s390
 FROM emscripten/emsdk:$EMSDK_VERSION_QEMU AS glib-emscripten-base
 # Porting glib to emscripten inspired by https://github.com/emscripten-core/emscripten/issues/11066
 ENV TARGET=/glib-emscripten/target
-ENV CFLAGS="-O2 -matomics -mbulk-memory -DNDEBUG -sWASM_BIGINT -DWASM_BIGINT -pthread -sMALLOC=emmalloc  -sASYNCIFY=1 "
+ENV CFLAGS="-O2 -matomics -mbulk-memory -DNDEBUG -sWASM_BIGINT -DWASM_BIGINT -pthread -sMALLOC=mimalloc  -sASYNCIFY=1 "
 ENV CXXFLAGS="$CFLAGS"
 ENV LDFLAGS="-L$TARGET/lib -O2"
 ENV CPATH="$TARGET/include"
@@ -426,7 +426,7 @@ COPY --link --from=zlib-emscripten-dev /glib-emscripten/ /glib-emscripten/
 COPY --link --from=libffi-emscripten-dev /glib-emscripten/ /glib-emscripten/
 
 WORKDIR /glib
-ENV CFLAGS="-Wno-error=incompatible-function-pointer-types -Wincompatible-function-pointer-types -O2 -matomics -mbulk-memory -DNDEBUG -pthread -sWASM_BIGINT -sMALLOC=emmalloc -sASYNCIFY=1"
+ENV CFLAGS="-Wno-error=incompatible-function-pointer-types -Wincompatible-function-pointer-types -O2 -matomics -mbulk-memory -DNDEBUG -pthread -sWASM_BIGINT -sMALLOC=mimalloc -sASYNCIFY=1"
 ENV CXXFLAGS="$CFLAGS"
 # WasmFS pipes do not implement F_GETFL/F_SETFL. The Wasmtime host bounds event
 # loop waits, so both GLib and QEMU can safely use their wakeup pipes as-is.
@@ -726,8 +726,11 @@ COPY --link --from=pixman-emscripten-dev /glib-emscripten/ /glib-emscripten/
 RUN mkdir -p build
 WORKDIR /qemu/build
 RUN npm i xterm-pty@v0.10.1
-RUN cp /qemu/build/node_modules/xterm-pty/emscripten-pty.js /glib-emscripten/target/lib/libemscripten-pty.js
-ENV XTERM_PTY_CFLAGS="-lemscripten-pty.js -Wno-unused-command-line-argument"
+COPY --link --from=oci-image-src /patches/xterm-pty/ /tmp/xterm-pty-patches/
+RUN for patch_file in /tmp/xterm-pty-patches/*.patch; do \
+      patch -d /qemu/build/node_modules/xterm-pty -p1 < "$patch_file"; \
+    done
+ENV XTERM_PTY_CFLAGS="--js-library=/qemu/build/node_modules/xterm-pty/emscripten-pty.js"
 
 FROM linux-riscv64-dev-common AS linux-riscv64-config-dev-qemu
 WORKDIR /work-buildlinux/linux
@@ -874,7 +877,7 @@ WORKDIR /qemu/build/
 ARG QEMU_MIGRATION
 RUN if test "${QEMU_MIGRATION}" = "true"  ; then /get-qemu-state -output=/pack/vm.state --args-json=/args-before-cp.json ./qemu-system-riscv64 ; fi
 
-FROM qemu-emscripten-dev AS qemu-emscripten-dev-amd64
+FROM qemu-emscripten-dev AS qemu-emscripten-engine-amd64
 ARG LOAD_MODE
 ARG QEMU_WASMTIME_JIT
 ARG QEMU_WASMTIME_DISABLE_JIT
@@ -882,7 +885,7 @@ ARG QEMU_WASMTIME_DISABLE_JIT
 # its `_wasmfs_node_*` import ABI directly, without Node or JavaScript.
 RUN JIT_LINK_FLAG= && TCG_CONFIGURE_FLAG= && WASMTIME_CFLAGS= && \
     PTY_FLAGS="$XTERM_PTY_CFLAGS" && \
-    RUNTIME_METHOD_FLAGS="-sEXPORTED_RUNTIME_METHODS=addFunction,removeFunction,TTY,FS" && \
+    RUNTIME_METHOD_FLAGS="-sEXPORTED_RUNTIME_METHODS=getTempRet0,setTempRet0,addFunction,removeFunction,TTY,FS" && \
     RUNTIME_FLAGS="-pthread -sPROXY_TO_PTHREAD=1 -sFORCE_FILESYSTEM -sEXPORT_ES6=1" && \
     if test "${QEMU_WASMTIME_JIT}" = "true"; then \
       JIT_LINK_FLAG="-sERROR_ON_UNDEFINED_SYMBOLS=0 -Wl,--export-memory -Wl,--export=__syscall_poll"; \
@@ -896,7 +899,7 @@ RUN JIT_LINK_FLAG= && TCG_CONFIGURE_FLAG= && WASMTIME_CFLAGS= && \
     elif test "${QEMU_WASMTIME_JIT}" = "true"; then \
       JIT_LINK_FLAG="$JIT_LINK_FLAG -Wl,--export=init_wasm32"; \
     fi && \
-    EXTRA_CFLAGS="-O3 -g -Wno-error=unused-command-line-argument -Wno-error=unused-but-set-variable -matomics -mbulk-memory -DNDEBUG -DG_DISABLE_ASSERT -D_GNU_SOURCE -DHAVE_GETLOADAVG_FUNCTION -sASYNCIFY=1 $RUNTIME_FLAGS $WASMTIME_CFLAGS -sALLOW_TABLE_GROWTH -sTOTAL_MEMORY=$((3000*1024*1024)) -sWASM_BIGINT -sMALLOC=emmalloc -sASYNCIFY_IMPORTS=ffi_call_js $PTY_FLAGS " && \
+    EXTRA_CFLAGS="-O3 -g -Wno-error=unused-command-line-argument -matomics -mbulk-memory -DNDEBUG -DG_DISABLE_ASSERT -D_GNU_SOURCE -DHAVE_GETLOADAVG_FUNCTION -sASYNCIFY=1 $RUNTIME_FLAGS $WASMTIME_CFLAGS -sALLOW_TABLE_GROWTH -sTOTAL_MEMORY=2300MB -sWASM_BIGINT -sMALLOC=mimalloc -sASYNCIFY_IMPORTS=ffi_call_js $PTY_FLAGS " && \
     emconfigure ../configure --static --target-list=x86_64-softmmu --cpu=wasm32 --cross-prefix= \
     ${TCG_CONFIGURE_FLAG} \
     --without-default-features --enable-system --with-coroutine=fiber --enable-virtfs \
@@ -904,6 +907,15 @@ RUN JIT_LINK_FLAG= && TCG_CONFIGURE_FLAG= && WASMTIME_CFLAGS= && \
     --extra-ldflags="$JIT_LINK_FLAG $RUNTIME_METHOD_FLAGS" && \
     printf '%s\n' '#define HAVE_GETLOADAVG_FUNCTION 1' '#define CONFIG_POSIX_MEMALIGN 1' >> config-host.h && \
     emmake make -j $(nproc) qemu-system-x86_64
+RUN /emsdk/upstream/bin/llvm-strip --strip-debug /qemu/build/qemu-system-x86_64.wasm
+
+FROM scratch AS js-qemu-amd64-engine
+COPY --link --from=qemu-emscripten-engine-amd64 /qemu/build/qemu-system-x86_64 /out.js
+COPY --link --from=qemu-emscripten-engine-amd64 /qemu/build/qemu-system-x86_64.wasm /
+COPY --link --from=qemu-emscripten-engine-amd64 /qemu/build/qemu-system-x86_64.worker.js /
+
+FROM qemu-emscripten-engine-amd64 AS qemu-emscripten-dev-amd64
+COPY --link --from=qemu-x86_64-pack /pack /pack
 RUN if test "${QEMU_WASMTIME_JIT}" = "true"; then \
       : ; \
     elif test "${LOAD_MODE}" = "single" ; then \
@@ -921,8 +933,8 @@ RUN if test "${QEMU_WASMTIME_JIT}" = "true"; then \
     fi
 
 FROM scratch AS js-qemu-amd64-base
-COPY --link --from=qemu-emscripten-dev-amd64 /qemu/build/qemu-system-x86_64 /out.js
-COPY --link --from=qemu-emscripten-dev-amd64 /qemu/build/qemu-system-x86_64.wasm /
+COPY --link --from=qemu-emscripten-engine-amd64 /qemu/build/qemu-system-x86_64 /out.js
+COPY --link --from=qemu-emscripten-engine-amd64 /qemu/build/qemu-system-x86_64.wasm /
 COPY --link --from=qemu-config-dev-amd64 /out/arg-module.js /
 
 FROM js-qemu-amd64-base AS js-qemu-amd64-single
