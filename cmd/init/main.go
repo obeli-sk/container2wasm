@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -158,28 +157,11 @@ func doInit() error {
 		// QEMU snapshot can be created here
 		//////////////////////////////////////////////////////////////////////
 		fmt.Printf("==========") // special string not printed
-		// Keep the vCPU in guest userspace long enough for get-qemu-state to
-		// start migration. A timer sleep is not safe here: a timer captured by
-		// native QEMU has not reliably fired after restoring into wasm32 QEMU.
-		// The deliberately stateful loop also keeps the compiler from removing
-		// the snapshot window.
-		var snapshotSpin uint64
-		for i := uint64(0); i < 1_000_000; i++ {
-			snapshotSpin = snapshotSpin*1_664_525 + i + 1_013_904_223
-		}
-		runtime.KeepAlive(snapshotSpin)
-		log.Printf("activity-vm: resumed after snapshot guard")
-		mountAttempts := 0
 		for {
 			if err := syscall.Mount(packFSTag, packFSDst, "9p", 0, "trans=virtio,version=9p2000.L"); err != nil {
-				if mountAttempts == 0 {
-					log.Printf("activity-vm: first pack mount failed: %v", err)
-				}
-				mountAttempts++
 				//return fmt.Errorf("failed mounting(pack) %q: %w", packFSTag, err)
 				continue
 			}
-			log.Printf("activity-vm: pack mount succeeded after %d retries", mountAttempts)
 			if _, err := os.Stat(filepath.Join(packFSDst, "info")); err == nil {
 				break // info file exists
 			} else if !errors.Is(err, os.ErrNotExist) {

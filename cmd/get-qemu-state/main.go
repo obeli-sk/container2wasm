@@ -68,6 +68,9 @@ func main() {
 		if err != nil {
 			log.Fatalf("failed to start monitor: %v", err)
 		}
+		if _, err := io.WriteString(stdin, "stop\n"); err != nil {
+			log.Fatalf("failed to stop VM before migration: %v", err)
+		}
 		for {
 			if _, err := io.WriteString(stdin, fmt.Sprintf("migrate file:%s\n", *outputFile)); err != nil {
 				log.Fatalf("failed to invoke migrate: %v", err)
