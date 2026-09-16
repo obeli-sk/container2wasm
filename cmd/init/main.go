@@ -157,8 +157,13 @@ func doInit() error {
 		// QEMU snapshot can be created here
 		//////////////////////////////////////////////////////////////////////
 		fmt.Printf("==========") // special string not printed
+		serial, err := os.Open("/dev/ttyS0")
+		if err != nil {
+			return fmt.Errorf("failed opening QEMU resume serial: %w", err)
+		}
+		defer serial.Close()
 		var resume [1]byte
-		if _, err := io.ReadFull(os.Stdin, resume[:]); err != nil {
+		if _, err := io.ReadFull(serial, resume[:]); err != nil {
 			return fmt.Errorf("failed waiting for QEMU snapshot resume byte: %w", err)
 		}
 		for {
