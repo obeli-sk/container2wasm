@@ -68,11 +68,12 @@ func main() {
 		if err != nil {
 			log.Fatalf("failed to start monitor: %v", err)
 		}
-		if _, err := io.WriteString(stdin, "stop\n"); err != nil {
-			log.Fatalf("failed to stop VM before migration: %v", err)
-		}
+		// Keep the source VM running when migration starts. QEMU records that
+		// runstate in the global-state migration section, so an incoming QEMU
+		// starts the restored VM automatically. Stopping here records a stopped
+		// VM and forces every runtime to enter the monitor and issue `cont`.
 		for {
-			if _, err := io.WriteString(stdin, fmt.Sprintf("migrate file:%s\n", *outputFile)); err != nil {
+			if err := requestMigration(stdin, *outputFile); err != nil {
 				log.Fatalf("failed to invoke migrate: %v", err)
 			}
 			time.Sleep(500 * time.Millisecond)
@@ -120,4 +121,9 @@ func main() {
 	if err := cmd.Wait(); err != nil {
 		log.Fatalf("waiting for qemu: %v", err)
 	}
+}
+
+func requestMigration(writer io.Writer, outputFile string) error {
+	_, err := fmt.Fprintf(writer, "migrate file:%s\n", outputFile)
+	return err
 }
