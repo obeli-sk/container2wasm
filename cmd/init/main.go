@@ -168,11 +168,18 @@ func doInit() error {
 			snapshotSpin = snapshotSpin*1_664_525 + i + 1_013_904_223
 		}
 		runtime.KeepAlive(snapshotSpin)
+		log.Printf("activity-vm: resumed after snapshot guard")
+		mountAttempts := 0
 		for {
 			if err := syscall.Mount(packFSTag, packFSDst, "9p", 0, "trans=virtio,version=9p2000.L"); err != nil {
+				if mountAttempts == 0 {
+					log.Printf("activity-vm: first pack mount failed: %v", err)
+				}
+				mountAttempts++
 				//return fmt.Errorf("failed mounting(pack) %q: %w", packFSTag, err)
 				continue
 			}
+			log.Printf("activity-vm: pack mount succeeded after %d retries", mountAttempts)
 			if _, err := os.Stat(filepath.Join(packFSDst, "info")); err == nil {
 				break // info file exists
 			} else if !errors.Is(err, os.ErrNotExist) {
