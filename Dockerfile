@@ -885,13 +885,15 @@ RUN JIT_LINK_FLAG= && TCG_CONFIGURE_FLAG= && \
     RUNTIME_METHOD_FLAGS="-sEXPORTED_RUNTIME_METHODS=addFunction,removeFunction,TTY,FS" && \
     RUNTIME_FLAGS="-pthread -sPROXY_TO_PTHREAD=1 -sFORCE_FILESYSTEM -sEXPORT_ES6=1" && \
     if test "${QEMU_WASMTIME_JIT}" = "true"; then \
-      JIT_LINK_FLAG="-sERROR_ON_UNDEFINED_SYMBOLS=0 -Wl,--export-memory -Wl,--export=__syscall_poll -Wl,--export=init_wasm32"; \
+      JIT_LINK_FLAG="-sERROR_ON_UNDEFINED_SYMBOLS=0 -Wl,--export-memory -Wl,--export=__syscall_poll"; \
       PTY_FLAGS=; \
       RUNTIME_METHOD_FLAGS=; \
       RUNTIME_FLAGS="-pthread -sSTANDALONE_WASM=1 -sWASMFS=1 -sNODERAWFS=1"; \
     fi && \
     if test "${QEMU_WASMTIME_DISABLE_JIT}" = "true"; then \
       TCG_CONFIGURE_FLAG=--enable-tcg-interpreter; \
+    elif test "${QEMU_WASMTIME_JIT}" = "true"; then \
+      JIT_LINK_FLAG="$JIT_LINK_FLAG -Wl,--export=init_wasm32"; \
     fi && \
     EXTRA_CFLAGS="-O3 -g -Wno-error=unused-command-line-argument -Wno-error=unused-but-set-variable -matomics -mbulk-memory -DNDEBUG -DG_DISABLE_ASSERT -D_GNU_SOURCE -DHAVE_GETLOADAVG_FUNCTION -sASYNCIFY=1 $RUNTIME_FLAGS -sALLOW_TABLE_GROWTH -sTOTAL_MEMORY=$((3000*1024*1024)) -sWASM_BIGINT -sMALLOC=emmalloc -sASYNCIFY_IMPORTS=ffi_call_js $PTY_FLAGS " && \
     emconfigure ../configure --static --target-list=x86_64-softmmu --cpu=wasm32 --cross-prefix= \
