@@ -164,7 +164,7 @@ func doInit() error {
 		// The deliberately stateful loop also keeps the compiler from removing
 		// the snapshot window.
 		var snapshotSpin uint64
-		for i := uint64(0); i < 10_000_000; i++ {
+		for i := uint64(0); i < 1_000_000; i++ {
 			snapshotSpin = snapshotSpin*1_664_525 + i + 1_013_904_223
 		}
 		runtime.KeepAlive(snapshotSpin)
