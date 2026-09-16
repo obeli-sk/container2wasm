@@ -157,6 +157,10 @@ func doInit() error {
 		// QEMU snapshot can be created here
 		//////////////////////////////////////////////////////////////////////
 		fmt.Printf("==========") // special string not printed
+		var resume [1]byte
+		if _, err := io.ReadFull(os.Stdin, resume[:]); err != nil {
+			return fmt.Errorf("failed waiting for QEMU snapshot resume byte: %w", err)
+		}
 		for {
 			if err := syscall.Mount(packFSTag, packFSDst, "9p", 0, "trans=virtio,version=9p2000.L"); err != nil {
 				//return fmt.Errorf("failed mounting(pack) %q: %w", packFSTag, err)
